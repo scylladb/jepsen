@@ -13,4 +13,5 @@ docker run -it --privileged -v /jepsen/directory/on/host:/host jkni/jepsen
 to run Jepsen tests under development.
 
 The Jepsen library has diverged from upstream; before running any tests, run
-`lein install` from the jepsen directory.
+`lein install` from the jepsen directory. If you're using the Docker container,
+you'll want to run this command inside the container, not on your host system.
