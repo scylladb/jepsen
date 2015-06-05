@@ -131,6 +131,5 @@
   (merge tests/noop-test
          {:name    (str "cassandra " name)
           :os      debian/os
-          :db      (db "2.1.5")
-          :nemesis (nemesis/noop)}
+          :db      (db "2.1.5")}
          opts))
