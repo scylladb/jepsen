@@ -33,9 +33,20 @@
   "Installs Cassandra on the given node."
   [node version]
   (c/su
-   (info node "installing Cassandra" version "from binary tarball")
    (c/cd
     "/tmp"
+    (let [url (or (System/getenv "CASSANDRA_TARBALL_URL")
+                  (str "http://www.us.apache.org/dist/cassandra/" version
+                       "/apache-cassandra-" version "-bin.tar.gz"))]
+      (info node "installing Cassandra from" url)
+      (c/exec :if (lit "!")  :grep :-s :-F :-x url (lit ".download ;")
+              :then :wget :-O "cassandra.tar.gz" url (lit ";")
+              :tar :xzvf "cassandra.tar.gz" :-C "~" (lit ";")
+              :rm :-r :-f (lit "~/cassandra ;")
+              :mv (lit "~/apache* ~/cassandra ;")
+              :echo url :> (lit ".download ;")
+              :else :touch (lit ".usedcached ;")
+              :fi))
     (c/exec
      :echo
      "deb http://ppa.launchpad.net/webupd8team/java/ubuntu trusty main"
@@ -50,31 +61,29 @@
     (c/exec :echo
             "debconf shared/accepted-oracle-license-v1-1 select true"
             | :debconf-set-selections)
-    (debian/install [:oracle-java8-installer])
-    (meh (c/exec :wget :-c :-nc :-O "cassandra.tar.gz"
-                 (str "http://www.us.apache.org/dist/cassandra/" version
-                      "/apache-cassandra-" version "-bin.tar.gz")))
-    (meh (c/exec :tar :xzvf "cassandra.tar.gz" :-C "~"))
-    (meh (c/exec :mv (str  "~/apache-cassandra-" version) "~/cassandra")))))
+    (debian/install [:oracle-java8-installer]))))
 
 (defn configure!
   "Uploads configuration files to the given node."
   [node test]
   (info node "configuring Cassandra")
   (c/su
-   (c/exec :echo
-           (-> "cassandra-env.sh"
-               io/resource
-               slurp)
-           :> "~/cassandra/conf/cassandra-env.sh")
-   (c/exec :echo
-           (-> "cassandra.yaml"
-               io/resource
-               slurp
-               (str/replace "$NODE_IP" (net/local-ip))
-               (str/replace "$NODES" (->> test :nodes (map name)
-                                          (str/join ","))))
-           :> "~/cassandra/conf/cassandra.yaml")))
+   (doseq [rep ["\"s/#MAX_HEAP_SIZE=.*/MAX_HEAP_SIZE='512M'/g\""
+                "\"s/#HEAP_NEWSIZE=.*/HEAP_NEWSIZE='128M'/g\""]]
+     (c/exec :sed :-i (lit rep) "~/cassandra/conf/cassandra-env.sh"))
+   (doseq [rep ["\"s/cluster_name: .*/cluster_name: 'jepsen'/g\""
+                "\"s/row_cache_size_in_mb: .*/row_cache_size_in_mb: 20/g\""
+                "\"s/commitlog_segment_size_in_mb: .*/commitlog_segment_size_in_mb: 31/g\""
+                "\"s/seeds: .*/seeds: 'n1,n2'/g\""
+                "\"s/commitlog_total_space_in_mb: .*/commitlog_total_space_in_mb: 32/g\""
+                (str "\"s/listen_address: .*/listen_address: " (net/local-ip)
+                     "/g\"")
+                (str "\"s/rpc_address: .*/rpc_address: " (net/local-ip) "/g\"")
+                (str "\"s/broadcast_rpc_address: .*/broadcast_rpc_address: "
+                     (net/local-ip) "/g\"")
+                "\"s/internode_compression: .*/internode_compression: none/g\""]]
+     (binding [c/*trace* true]
+         (c/exec :sed :-i (lit rep) "~/cassandra/conf/cassandra.yaml")))))
 
 (defn start!
   "Starts Cassandra."
@@ -96,9 +105,9 @@
   (stop! node)
   (info node "deleting data files")
   (c/su
-   (c/exec :rm :-r "~/cassandra/data/data")
-   (c/exec :rm :-r "~/cassandra/data/commitlog")
-   (c/exec :rm :-r "~/cassandra/data/saved_caches")))
+   (meh (c/exec :rm :-r "~/cassandra/data/data"))
+   (meh (c/exec :rm :-r "~/cassandra/data/commitlog"))
+   (meh (c/exec :rm :-r "~/cassandra/data/saved_caches"))))
 
 (defn db
   "Cassandra for a particular version."
