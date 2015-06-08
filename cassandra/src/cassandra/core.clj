@@ -82,8 +82,7 @@
                 (str "\"s/broadcast_rpc_address: .*/broadcast_rpc_address: "
                      (net/local-ip) "/g\"")
                 "\"s/internode_compression: .*/internode_compression: none/g\""]]
-     (binding [c/*trace* true]
-         (c/exec :sed :-i (lit rep) "~/cassandra/conf/cassandra.yaml")))))
+     (c/exec :sed :-i (lit rep) "~/cassandra/conf/cassandra.yaml"))))
 
 (defn start!
   "Starts Cassandra."
