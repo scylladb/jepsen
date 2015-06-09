@@ -73,16 +73,15 @@
      (c/exec :sed :-i (lit rep) "~/cassandra/conf/cassandra-env.sh"))
    (doseq [rep ["\"s/cluster_name: .*/cluster_name: 'jepsen'/g\""
                 "\"s/row_cache_size_in_mb: .*/row_cache_size_in_mb: 20/g\""
-                "\"s/commitlog_segment_size_in_mb: .*/commitlog_segment_size_in_mb: 31/g\""
                 "\"s/seeds: .*/seeds: 'n1,n2'/g\""
-                "\"s/commitlog_total_space_in_mb: .*/commitlog_total_space_in_mb: 32/g\""
                 (str "\"s/listen_address: .*/listen_address: " (net/local-ip)
                      "/g\"")
                 (str "\"s/rpc_address: .*/rpc_address: " (net/local-ip) "/g\"")
                 (str "\"s/broadcast_rpc_address: .*/broadcast_rpc_address: "
                      (net/local-ip) "/g\"")
                 "\"s/internode_compression: .*/internode_compression: none/g\""]]
-     (c/exec :sed :-i (lit rep) "~/cassandra/conf/cassandra.yaml"))))
+     (c/exec :sed :-i (lit rep) "~/cassandra/conf/cassandra.yaml"))
+   (c/exec :echo "auto_bootstrap: false" :>> "~/cassandra/conf/cassandra.yaml")))
 
 (defn start!
   "Starts Cassandra."
@@ -96,7 +95,7 @@
   [node]
   (info node "stopping Cassandra")
   (c/su
-   (meh (c/exec :pkill :-f (lit "'java.*cassandra.*'")))))
+   (meh (c/exec :killall :java))))
 
 (defn wipe!
   "Shuts down Cassandra and wipes data."
@@ -133,6 +132,41 @@
   []
   (gen/clients
    (gen/once {:type :invoke :f :read})))
+
+(defn recover
+  "A generator which stops the nemesis and allows some time for recovery."
+  []
+  (gen/nemesis
+   (gen/phases
+    (gen/once {:type :info, :f :stop})
+    (gen/sleep 20))))
+
+(defn mostly-small-nonempty-subset
+  "Returns a subset of the given collection, with a logarithmically decreasing
+  probability of selecting more elements. Always selects at least one element.
+      (->> #(mostly-small-nonempty-subset [1 2 3 4 5])
+           repeatedly
+           (map count)
+           (take 10000)
+           frequencies
+           sort)
+      ; => ([1 3824] [2 2340] [3 1595] [4 1266] [5 975])"
+  [xs]
+  (-> xs
+      count
+      inc
+      Math/log
+      rand
+      Math/exp
+      long
+      (take (shuffle xs))))
+
+(def crash-nemesis
+  "A nemesis that crashes a random subset of nodes."
+  (nemesis/node-start-stopper
+   mostly-small-nonempty-subset
+   (fn start [test node] (c/su (c/exec :killall :-9 :java)) [:killed node])
+   (fn stop  [test node] (start! node test) [:restarted node])))
 
 (defn cassandra-test
   [name opts]

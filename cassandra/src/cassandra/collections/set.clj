@@ -26,7 +26,10 @@
             [clojurewerkz.cassaforte.cql :as cql]
             [cassandra.core :refer :all])
   (:import (clojure.lang ExceptionInfo)
-           (com.datastax.driver.core ConsistencyLevel)))
+           (com.datastax.driver.core ConsistencyLevel)
+           (com.datastax.driver.core.exceptions UnavailableException
+                                                WriteTimeoutException
+                                                ReadTimeoutException)))
 
 (defrecord CQLSetClient [conn]
   client/Client
@@ -49,22 +52,36 @@
                     {:id 0
                      :elements #{}})
         (CQLSetClient. conn))))
-  (invoke! [_ test op]
+  (invoke! [this test op]
     (case (:f op)
-      :add (do
-             (with-consistency-level ConsistencyLevel/ANY
-               (cql/update conn
-                           "sets"
-                           {:elements [+ #{(:value op)}]}
-                           (where [[= :id 0]])))
-             (assoc op :type :ok))
-      :read (let [value (->> (with-consistency-level ConsistencyLevel/ALL
-                               (cql/select conn "sets"
-                                           (where [[= :id 0]])))
-                             first
-                             :elements
-                             (into (sorted-set)))]
-              (assoc op :type :ok :value value))))
+      :add (try (do
+                  (with-consistency-level ConsistencyLevel/ANY
+                    (cql/update conn
+                                "sets"
+                                {:elements [+ #{(:value op)}]}
+                                (where [[= :id 0]])))
+                  (assoc op :type :ok))
+                (catch UnavailableException e
+                  (assoc op :type :fail :value (.getMessage e)))
+                (catch WriteTimeoutException e
+                  (assoc op :type :info :value :timed-out)))
+      :read (try (let [value (->> (with-retry-policy (retry-policy :default)
+                                    (with-consistency-level ConsistencyLevel/ALL
+                                      (cql/select conn "sets"
+                                                  (where [[= :id 0]]))))
+                                  first
+                                  :elements
+                                  (into (sorted-set)))]
+                   (assoc op :type :ok :value value))
+                 (catch UnavailableException e
+                   (info "Not enough replicas - retrying in 2 seconds")
+                   (Thread/sleep 2000)
+                   (client/invoke! this test op))
+                 (catch StackOverflowError e
+                   (info "We probably overflowed the stack on retries")
+                   (throw e))
+                 (catch ReadTimeoutException e
+                   (assoc op :type :info :value :timed-out)))))
   (teardown! [_ _]
     (info "Tearing down client with conn" conn)
     (cassandra/disconnect! conn)))
@@ -75,21 +92,21 @@
   (->CQLSetClient nil))
 
 (defn cql-set-test
-  [opts]
-  (merge (cassandra-test "cql set"
+  [name opts]
+  (merge (cassandra-test (str "cql set " name)
                          {:client (cql-set-client)
                           :model (model/set)
                           :generator (gen/phases
                                       (->> (adds)
                                            (gen/stagger 1/10)
-                                           (gen/delay 1/5)
+                                           (gen/delay 1/2)
                                            (gen/nemesis
                                             (gen/seq (cycle
                                                       [(gen/sleep 10)
                                                        {:type :info :f :start}
                                                        (gen/sleep 120)
                                                        {:type :info :f :stop}])))
-                                           (gen/time-limit 60))
+                                           (gen/time-limit 600))
                                       (read-once))
                           :checker (checker/compose
                                     {:timeline timeline/html
@@ -97,3 +114,19 @@
                                      :latency (checker/latency-graph
                                                "report")})})
          opts))
+
+(def bridge-test
+  (cql-set-test "bridge"
+                {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))}))
+
+(def halves-test
+  (cql-set-test "halves"
+                {:nemesis (nemesis/partition-random-halves)}))
+
+(def isolate-node-test
+  (cql-set-test "isolate node"
+                {:nemesis (nemesis/partition-random-node)}))
+
+(def crash-subset-test
+  (cql-set-test "crash"
+                {:nemesis crash-nemesis}))
