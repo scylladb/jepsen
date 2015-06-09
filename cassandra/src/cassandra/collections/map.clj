@@ -1,4 +1,4 @@
-(ns cassandra.collections.set
+(ns cassandra.collections.map
   (:require [clojure [pprint :refer :all]
              [string :as str]]
             [clojure.java.io :as io]
@@ -29,9 +29,10 @@
            (com.datastax.driver.core ConsistencyLevel)
            (com.datastax.driver.core.exceptions UnavailableException
                                                 WriteTimeoutException
-                                                ReadTimeoutException)))
+                                                ReadTimeoutException
+                                                NoHostAvailableException)))
 
-(defrecord CQLSetClient [conn]
+(defrecord CQLMapClient [conn]
   client/Client
   (setup! [_ test node]
     (Thread/sleep 20000)
@@ -43,34 +44,39 @@
                                     {:class "SimpleStrategy"
                                      :replication_factor 3}}))
         (cql/use-keyspace conn "jepsen_keyspace")
-        (cql/create-table conn "sets"
+        (cql/create-table conn "maps"
                           (if-not-exists)
                           (column-definitions {:id :int
-                                               :elements (set-type :int)
+                                               :elements (map-type :int :int)
                                                :primary-key [:id]}))
-        (cql/insert conn "sets"
+        (cql/insert conn "maps"
                     {:id 0
-                     :elements #{}})
-        (CQLSetClient. conn))))
+                     :elements {}})
+        (CQLMapClient. conn))))
   (invoke! [this test op]
     (case (:f op)
       :add (try (do
                   (with-consistency-level ConsistencyLevel/ONE
                     (cql/update conn
-                                "sets"
-                                {:elements [+ #{(:value op)}]}
+                                "maps"
+                                {:elements [+ {(:value op) (:value op)}]}
                                 (where [[= :id 0]])))
                   (assoc op :type :ok))
                 (catch UnavailableException e
                   (assoc op :type :fail :value (.getMessage e)))
                 (catch WriteTimeoutException e
-                  (assoc op :type :info :value :timed-out)))
+                  (assoc op :type :info :value :timed-out))
+                (catch NoHostAvailableException e
+                  (info "All hosts are down - maybe we kill -9ed them all")
+                  (Thread/sleep 2000)
+                  (assoc op :type :value :value (.getMessage e))))
       :read (try (let [value (->> (with-retry-policy (retry-policy :default)
                                     (with-consistency-level ConsistencyLevel/ALL
-                                      (cql/select conn "sets"
+                                      (cql/select conn "maps"
                                                   (where [[= :id 0]]))))
                                   first
                                   :elements
+                                  vals
                                   (into (sorted-set)))]
                    (assoc op :type :ok :value value))
                  (catch UnavailableException e
@@ -86,15 +92,15 @@
     (info "Tearing down client with conn" conn)
     (cassandra/disconnect! conn)))
 
-(defn cql-set-client
+(defn cql-map-client
   "A set implemented using CQL sets"
   []
-  (->CQLSetClient nil))
+  (->CQLMapClient nil))
 
-(defn cql-set-test
+(defn cql-map-test
   [name opts]
-  (merge (cassandra-test (str "cql set " name)
-                         {:client (cql-set-client)
+  (merge (cassandra-test (str "cql map " name)
+                         {:client (cql-map-client)
                           :model (model/set)
                           :generator (gen/phases
                                       (->> (adds)
@@ -116,17 +122,17 @@
          opts))
 
 (def bridge-test
-  (cql-set-test "bridge"
+  (cql-map-test "bridge"
                 {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))}))
 
 (def halves-test
-  (cql-set-test "halves"
+  (cql-map-test "halves"
                 {:nemesis (nemesis/partition-random-halves)}))
 
 (def isolate-node-test
-  (cql-set-test "isolate node"
+  (cql-map-test "isolate node"
                 {:nemesis (nemesis/partition-random-node)}))
 
 (def crash-subset-test
-  (cql-set-test "crash"
+  (cql-map-test "crash"
                 {:nemesis crash-nemesis}))
