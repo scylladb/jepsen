@@ -79,7 +79,12 @@
                 (str "\"s/rpc_address: .*/rpc_address: " (net/local-ip) "/g\"")
                 (str "\"s/broadcast_rpc_address: .*/broadcast_rpc_address: "
                      (net/local-ip) "/g\"")
-                "\"s/internode_compression: .*/internode_compression: none/g\""]]
+                "\"s/internode_compression: .*/internode_compression: none/g\""
+                "\"s/commitlog_sync: .*/commitlog_sync: batch/g\""
+                (str "\"s/# commitlog_sync_batch_window_in_ms: .*/"
+                     "commitlog_sync_batch_window_in_ms: 1.0/g\"")
+                "\"s/commitlog_sync_period_in_ms: .*/#/g\""
+                "\"/auto_bootstrap: .*/d\""]]
      (c/exec :sed :-i (lit rep) "~/cassandra/conf/cassandra.yaml"))
    (c/exec :echo "auto_bootstrap: false" :>> "~/cassandra/conf/cassandra.yaml")))
 
