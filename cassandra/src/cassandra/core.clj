@@ -25,7 +25,40 @@
             [clojurewerkz.cassaforte.policies :refer :all]
             [clojurewerkz.cassaforte.cql :as cql])
   (:import (clojure.lang ExceptionInfo)
-           (com.datastax.driver.core ConsistencyLevel)))
+           (com.datastax.driver.core ConsistencyLevel)
+           (com.datastax.driver.core.policies RetryPolicy
+                                              RetryPolicy$RetryDecision)))
+
+(defn wait-for-recovery
+  "Waits for the driver to report all nodes are up"
+  [timeout-secs conn]
+  (timeout (* 1000 timeout-secs)
+           (throw (RuntimeException.
+                   (str "Driver didn't report all nodes were up in "
+                        timeout-secs "s - failing")))
+           (while (->> (cassandra/get-hosts conn)
+                       (map :is-up) and not)
+             (Thread/sleep 500))))
+
+; This policy should only be used for final reads! It tries to
+; aggressively get an answer from an unstable cluster after
+; stabilization
+(def aggressive-read
+  (proxy [RetryPolicy] []
+    (onReadTimeout [statement cl requiredResponses
+                    receivedResponses dataRetrieved nbRetry]
+      (if (> nbRetry 100)
+        (RetryPolicy$RetryDecision/rethrow)
+        (RetryPolicy$RetryDecision/retry cl)))
+    (onWriteTimeout [statement cl writeType requiredAcks
+                     receivedAcks nbRetry]
+      (RetryPolicy$RetryDecision/rethrow))
+    (onUnavailable [statement cl requiredReplica aliveReplica nbRetry]
+      (info "Caught UnavailableException in driver - sleeping 2s")
+      (Thread/sleep 2000)
+      (if (> nbRetry 100)
+        (RetryPolicy$RetryDecision/rethrow)
+        (RetryPolicy$RetryDecision/retry cl)))))
 
 (def setup-lock (Object.))
 

@@ -55,22 +55,20 @@
         (CQLMapClient. conn))))
   (invoke! [this test op]
     (case (:f op)
-      :add (try (do
-                  (with-consistency-level ConsistencyLevel/ONE
-                    (cql/update conn
-                                "maps"
-                                {:elements [+ {(:value op) (:value op)}]}
-                                (where [[= :id 0]])))
-                  (assoc op :type :ok))
+      :add (try (with-consistency-level ConsistencyLevel/ONE
+                  (cql/update conn
+                              "maps"
+                              {:elements [+ {(:value op) (:value op)}]}
+                              (where [[= :id 0]])))
+                (assoc op :type :ok)
                 (catch UnavailableException e
                   (assoc op :type :fail :value (.getMessage e)))
                 (catch WriteTimeoutException e
                   (assoc op :type :info :value :timed-out))
                 (catch NoHostAvailableException e
                   (info "All hosts are down - maybe we kill -9ed them all")
-                  (Thread/sleep 2000)
                   (assoc op :type :value :value (.getMessage e))))
-      :read (try (let [value (->> (with-retry-policy (retry-policy :default)
+      :read (try (let [value (->> (with-retry-policy aggressive-read
                                     (with-consistency-level ConsistencyLevel/ALL
                                       (cql/select conn "maps"
                                                   (where [[= :id 0]]))))
@@ -80,12 +78,8 @@
                                   (into (sorted-set)))]
                    (assoc op :type :ok :value value))
                  (catch UnavailableException e
-                   (info "Not enough replicas - retrying in 2 seconds")
-                   (Thread/sleep 2000)
-                   (client/invoke! this test op))
-                 (catch StackOverflowError e
-                   (info "We probably overflowed the stack on retries")
-                   (throw e))
+                   (info "Not enough replicas - failing")
+                   (assoc op :type :fail :value (.getMessage e)))
                  (catch ReadTimeoutException e
                    (assoc op :type :info :value :timed-out)))))
   (teardown! [_ _]
