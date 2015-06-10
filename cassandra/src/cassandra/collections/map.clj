@@ -87,7 +87,7 @@
     (cassandra/disconnect! conn)))
 
 (defn cql-map-client
-  "A set implemented using CQL sets"
+  "A set implemented using CQL maps"
   []
   (->CQLMapClient nil))
 
