@@ -60,13 +60,13 @@
                                 (where [[= :id 0]])))
                   (assoc op :type :ok))
                 (catch UnavailableException e
-                  (assoc op :type :fail :value {:error (.getMessage e)
-                                                :attempted-value (:value op)}))
+                  (assoc op :type :fail :error (.getMessage e)))
                 (catch WriteTimeoutException e
                   (assoc op :type :info :value :timed-out))
                 (catch NoHostAvailableException e
                   (info "All the servers are down - waiting 2s")
-                  (Thread/sleep 2000)))
+                  (Thread/sleep 2000)
+                  (assoc op :type :fail :error (.getMessage e))))
       :read (try (let [value (->> (with-consistency-level ConsistencyLevel/ALL
                                     (cql/select conn "counters"
                                                 (where [[= :id 0]])))
@@ -80,7 +80,8 @@
                    (assoc op :type :fail :value :timed-out))
                  (catch NoHostAvailableException e
                    (info "All the servers are down - waiting 2s")
-                   (Thread/sleep 2000)))))
+                   (Thread/sleep 2000)
+                   (assoc op :type :fail :error (.getMessage e))))))
   (teardown! [_ _]
     (info "Tearing down client with conn" conn)
     (cassandra/disconnect! conn)))

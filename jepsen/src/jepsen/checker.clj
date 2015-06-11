@@ -221,8 +221,7 @@
                 (recur history lower (+ upper (:value op)) pending-reads reads)
 
                 [:fail :add]
-                (recur history lower (- upper (-> op :value :attempted-value))
-                       pending-reads reads)
+                (recur history lower (- upper (:value op)) pending-reads reads)
 
                 [:ok :add]
                 (recur history (+ lower (:value op)) upper pending-reads reads)
