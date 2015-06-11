@@ -158,6 +158,27 @@
     (teardown! [_ test node]
       (wipe! node))))
 
+(defn std-gen
+  "Takes a client generator and wraps it in a typical schedule and nemesis
+  causing failover."
+  [gen]
+  (gen/phases
+   (->> gen
+        (gen/nemesis
+         (gen/seq (cycle [(gen/sleep 20)
+                          {:type :info :f :start}
+                          (gen/sleep 120)
+                          {:type :info :f :stop}])))
+        (gen/time-limit 600))
+                                        ; Recover
+                                        ; Wait for resumption of normal ops
+   (gen/clients
+    (->> gen
+         (gen/time-limit 30)))))
+
+(def add {:type :invoke :f :add :value 1})
+(def r {:type :invoke :f :read})
+
 (defn adds
   "Generator that emits :add operations for sequential integers."
   []
@@ -169,7 +190,7 @@
   "A generator which reads exactly once."
   []
   (gen/clients
-   (gen/once {:type :invoke :f :read})))
+   (gen/once r)))
 
 (defn recover
   "A generator which stops the nemesis and allows some time for recovery."

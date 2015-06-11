@@ -66,9 +66,11 @@
                 (catch WriteTimeoutException e
                   (assoc op :type :info :value :timed-out))
                 (catch NoHostAvailableException e
-                  (info "All hosts are down - maybe we kill -9ed them all")
-                  (assoc op :type :value :value (.getMessage e))))
-      :read (try (let [value (->> (with-retry-policy aggressive-read
+                  (info "All nodes are down - sleeping 2s")
+                  (Thread/sleep 2000)
+                  (assoc op :type :fail :value (.getMessage e))))
+      :read (try (wait-for-recovery 30 conn)
+                 (let [value (->> (with-retry-policy aggressive-read
                                     (with-consistency-level ConsistencyLevel/ALL
                                       (cql/select conn "sets"
                                                   (where [[= :id 0]]))))
@@ -80,7 +82,11 @@
                    (info "Not enough replicas - failing")
                    (assoc op :type :fail :value (.getMessage e)))
                  (catch ReadTimeoutException e
-                   (assoc op :type :fail :value :timed-out)))))
+                   (assoc op :type :fail :value :timed-out))
+                 (catch NoHostAvailableException e
+                   (info "All nodes are down - sleeping 2s")
+                   (Thread/sleep 2000)
+                   (assoc op :type :fail :value (.getMessage e))))))
   (teardown! [_ _]
     (info "Tearing down client with conn" conn)
     (cassandra/disconnect! conn)))
