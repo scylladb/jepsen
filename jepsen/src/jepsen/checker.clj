@@ -174,6 +174,9 @@
   each read, the value is at greater than the sum of all :ok increments, and
   lower than the sum of all attempted increments.
 
+  When testing Cassandra, we know a :fail increment did not occur, so we should
+  decrement the counter by the appropriate amount.
+
   Note that this counter verifier assumes the value monotonically increases. If
   you want to increment by negative amounts, you'll have to recalculate and
   possibly widen the intervals for all pending reads with each invoke/ok write.
@@ -216,6 +219,10 @@
 
                 [:invoke :add]
                 (recur history lower (+ upper (:value op)) pending-reads reads)
+
+                [:fail :add]
+                (recur history lower (- upper (-> op :value :attempted-value))
+                       pending-reads reads)
 
                 [:ok :add]
                 (recur history (+ lower (:value op)) upper pending-reads reads)

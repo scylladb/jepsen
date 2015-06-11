@@ -167,14 +167,14 @@
         (gen/nemesis
          (gen/seq (cycle [(gen/sleep 20)
                           {:type :info :f :start}
-                          (gen/sleep 120)
+                          (gen/sleep 60)
                           {:type :info :f :stop}])))
         (gen/time-limit 600))
                                         ; Recover
                                         ; Wait for resumption of normal ops
    (gen/clients
     (->> gen
-         (gen/time-limit 30)))))
+         (gen/time-limit 60)))))
 
 (def add {:type :invoke :f :add :value 1})
 (def r {:type :invoke :f :read})

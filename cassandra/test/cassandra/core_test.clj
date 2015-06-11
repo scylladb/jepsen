@@ -15,3 +15,14 @@
                (pprint (:history test)))
     (report/to (str "report/" (:name test) "/set.edn")
                (pprint (:set (:results test))))))
+
+(defn run-counter-test!
+  "Runs a counter test"
+  [test]
+  (let [test (jepsen/run! test)]
+    (or (is (:valid? (:results test)))
+        (println (:error (:results test))))
+    (report/to (str "report/" (:name test) "/history.edn")
+               (pprint (:history test)))
+    (report/to (str "report/" (:name test) "/counter.edn")
+               (pprint (:counter (:results test))))))
