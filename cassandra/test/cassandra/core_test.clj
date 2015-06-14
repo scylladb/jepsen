@@ -26,3 +26,14 @@
                (pprint (:history test)))
     (report/to (str "report/" (:name test) "/counter.edn")
                (pprint (:counter (:results test))))))
+
+(defn run-cas-register-test!
+  "Runs a cas register test"
+  [test]
+  (let [test (jepsen/run! test)]
+    (or (is (:valid? (:results test)))
+        (println (:error (:results test))))
+    (report/to (str "report/" (:name test) "/history.edn")
+               (pprint (:history test)))
+    (report/to (str "report/" (:name test) "/linearizability.txt")
+               (-> test :results :linear report/linearizability))))
