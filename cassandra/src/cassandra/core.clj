@@ -62,24 +62,36 @@
 
 (def setup-lock (Object.))
 
+(defn cached-install?
+  [src]
+  (try (c/exec :grep :-s :-F :-x (lit src) (lit ".download"))
+       true
+       (catch RuntimeException _ false)))
+
 (defn install!
   "Installs Cassandra on the given node."
   [node version]
   (c/su
    (c/cd
     "/tmp"
-    (let [url (or (System/getenv "CASSANDRA_TARBALL_URL")
+    (let [tpath (System/getenv "CASSANDRA_TARBALL_PATH")
+          url (or tpath
+                  (System/getenv "CASSANDRA_TARBALL_URL")
                   (str "http://www.us.apache.org/dist/cassandra/" version
                        "/apache-cassandra-" version "-bin.tar.gz"))]
       (info node "installing Cassandra from" url)
-      (c/exec :if (lit "!")  :grep :-s :-F :-x url (lit ".download ;")
-              :then :wget :-O "cassandra.tar.gz" url (lit ";")
-              :tar :xzvf "cassandra.tar.gz" :-C "~" (lit ";")
-              :rm :-r :-f (lit "~/cassandra ;")
-              :mv (lit "~/apache* ~/cassandra ;")
-              :echo url :> (lit ".download ;")
-              :else :touch (lit ".usedcached ;")
-              :fi))
+      (if (cached-install? url)
+        (info "used cache")
+        (info "didn't use cache"))
+      (if (cached-install? url)
+        (info "Used cached install on node" node)
+        (do (if tpath
+              (c/scp* tpath "/tmp/cassandra.tar.gz")
+              (c/exec :wget :-O "cassandra.tar.gz" url (lit ";")))
+            (c/exec :tar :xzvf "cassandra.tar.gz" :-C "~")
+            (c/exec :rm :-r :-f (lit "~/cassandra"))
+            (c/exec :mv (lit "~/apache* ~/cassandra"))
+            (c/exec :echo url :> (lit ".download")))))
     (c/exec
      :echo
      "deb http://ppa.launchpad.net/webupd8team/java/ubuntu trusty main"
@@ -178,6 +190,8 @@
 
 (def add {:type :invoke :f :add :value 1})
 (def r {:type :invoke :f :read})
+(defn w [_ _] {:type :invoke :f :write :value (rand-int 5)})
+(defn cas [_ _] {:type :invoke :f :cas :value [(rand-int 5) (rand-int 5)]})
 
 (defn adds
   "Generator that emits :add operations for sequential integers."

@@ -33,6 +33,8 @@
                                                 ReadTimeoutException
                                                 NoHostAvailableException)))
 
+(def ak (keyword "[applied]")) ;this is the name C* returns
+
 (defrecord CasRegisterClient [conn]
   client/Client
   (setup! [_ test node]
@@ -54,17 +56,15 @@
   (invoke! [this test op]
     (case (:f op)
       :cas (try (let [[v v'] (:value op)
-                      ak (keyword "[applied]") ;this is the name C* returns
-                      result (-> (cql/update conn "lwt" {:value v'}
+                      result (cql/update conn "lwt" {:value v'}
                                          (only-if [[= :value v]])
-                                         (where [[= :id 0]])))]
+                                         (where [[= :id 0]]))]
                   (if (-> result first ak)
                     (assoc op :type :ok)
                     (assoc op :type :fail)))
                 (catch UnavailableException e
                   (assoc op :type :fail :error (.getMessage e)))
                 (catch ReadTimeoutException e
-                  (info "READ TIMEOUT ON A CAS WHAT?")
                   (assoc op :type :info :value :read-timed-out))
                 (catch WriteTimeoutException e
                   (assoc op :type :info :value :write-timed-out))
@@ -72,18 +72,24 @@
                   (info "All the servers are down - waiting 2s")
                   (Thread/sleep 2000)
                   (assoc op :type :fail :error (.getMessage e))))
-      :write (try (let [v' (:value op)]
-                    (with-consistency-level ConsistencyLevel/QUORUM
-                      (cql/update conn
-                                  "lwt"
-                                  {:value v'}
-                                  (only-if [[:in :value [0 1 2 3 4 5]]])
-                                  (where [[= :id 0]])))
-                    (assoc op :type :ok))
+      :write (try (let [v' (:value op)
+                        result (cql/update conn
+                                           "lwt"
+                                           {:value v'}
+                                           (only-if [[:in :value (range 5)]])
+                                           (where [[= :id 0]]))]
+                    (if (-> result first ak)
+                      (assoc op :type :ok)
+                      (do (cql/insert conn "lwt" {:id 0
+                                                  :value v'}
+                                      (if-not-exists))
+                          (assoc op :type :ok))))
                   (catch UnavailableException e
                     (assoc op :type :fail :error (.getMessage e)))
+                  (catch ReadTimeoutException e
+                    (assoc op :type :info :value :read-timed-out))
                   (catch WriteTimeoutException e
-                    (assoc op :type :info :value :timed-out))
+                    (assoc op :type :info :value :write-timed-out))
                   (catch NoHostAvailableException e
                     (info "All the servers are down - waiting 2s")
                     (Thread/sleep 2000)
@@ -117,17 +123,18 @@
                          {:client (cas-register-client)
                           :model (model/cas-register)
                           :generator (gen/phases
-                                      (->> gen/cas
-                                          (gen/stagger 1/10)
-                                          (gen/delay 1)
-                                          (gen/nemesis
-                                           (gen/seq (cycle
-                                                     [(gen/sleep 5)
-                                                      {:type :info :f :stop}
-                                                      (gen/sleep 15)
-                                                      {:type :info :f :start}
-                                                   ])))
-                                          (gen/time-limit 80))
+                                      (->> [r w cas cas cas]
+                                           gen/mix
+                                           (gen/stagger 1/10)
+                                           (gen/delay 1)
+                                           (gen/nemesis
+                                            (gen/seq (cycle
+                                                      [(gen/sleep 5)
+                                                       {:type :info :f :stop}
+                                                       (gen/sleep 15)
+                                                       {:type :info :f :start}
+                                                       ])))
+                                           (gen/time-limit 50))
                                       gen/void)
                           :checker (checker/compose
                                     {:linear checker/linearizable})})
@@ -135,18 +142,16 @@
 
 (def bridge-test
   (cas-register-test "bridge"
-                    {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))}))
+                     {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))}))
 
 (def halves-test
   (cas-register-test "halves"
-                    {:nemesis (nemesis/partition-random-halves)}))
+                     {:nemesis (nemesis/partition-random-halves)}))
 
 (def isolate-node-test
   (cas-register-test "isolate node"
-                    {:nemesis (nemesis/partition-random-node)}))
+                     {:nemesis (nemesis/partition-random-node)}))
 
 (def crash-subset-test
   (cas-register-test "crash"
-                    {:nemesis crash-nemesis}))
-
-
+                     {:nemesis crash-nemesis}))
