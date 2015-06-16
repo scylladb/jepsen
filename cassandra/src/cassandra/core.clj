@@ -81,9 +81,6 @@
                        "/apache-cassandra-" version "-bin.tar.gz"))]
       (info node "installing Cassandra from" url)
       (if (cached-install? url)
-        (info "used cache")
-        (info "didn't use cache"))
-      (if (cached-install? url)
         (info "Used cached install on node" node)
         (do (if tpath
               (c/scp* tpath "/tmp/cassandra.tar.gz")
