@@ -172,16 +172,13 @@
 (def counter
   "A counter starts at zero; add operations should increment it by that much,
   and reads should return the present value. This checker validates that at
-  each read, the value is at greater than the sum of all :ok increments, and
-  lower than the sum of all attempted increments.
+  each read, the value is at greater than the sum of all :ok increments and
+  :invoke decrements, and lower than the sum of all attempted increments and
+  :ok decrements.
 
   When testing Cassandra, we know a :fail increment did not occur, so we should
   decrement the counter by the appropriate amount.
-
-  Note that this counter verifier assumes the value monotonically increases. If
-  you want to increment by negative amounts, you'll have to recalculate and
-  possibly widen the intervals for all pending reads with each invoke/ok write.
-
+  
   Returns a map:
 
   {:valid?              Whether the counter remained within bounds
@@ -219,13 +216,19 @@
                          (conj reads (conj r upper))))
 
                 [:invoke :add]
-                (recur history lower (+ upper (:value op)) pending-reads reads)
+                (let [value (:value op)
+                      [l' u'] (if (> value 0) [lower (+ upper value)] [(+ lower value) upper])]
+                  (recur history l' u' pending-reads reads))
 
                 [:fail :add]
-                (recur history lower (- upper (:value op)) pending-reads reads)
+                (let [value (:value op)
+                      [l' u'] (if (> value 0) [lower (- upper value)] [(- lower value) upper])]
+                  (recur history l' u' pending-reads reads))
 
                 [:ok :add]
-                (recur history (+ lower (:value op)) upper pending-reads reads)
+                (let [value (:value op)
+                      [l' u'] (if (> value 0) [(+ lower value) upper] [lower (+ upper value)])]
+                  (recur history l' u' pending-reads reads))
 
                 (recur history lower upper pending-reads reads))))))))
 
