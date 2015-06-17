@@ -91,9 +91,9 @@
   []
   (->CQLCounterClient nil))
 
-(defn cql-counter-test
+(defn cql-counter-inc-test
   [name opts]
-  (merge (cassandra-test (str "cql counter " name)
+  (merge (cassandra-test (str "cql counter inc " name)
                          {:client (cql-counter-client)
                           :model nil
                           :generator (->> (repeat 100 add)
@@ -108,18 +108,52 @@
                                                "report")})})
          opts))
 
-(def bridge-test
-  (cql-counter-test "bridge"
-                    {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))}))
+(defn cql-counter-inc-dec-test
+  [name opts]
+  (merge (cassandra-test (str "cql counter inc dec " name)
+                         {:client (cql-counter-client)
+                          :model nil
+                          :generator (->> (take 100 (cycle [add sub]))
+                                          (cons r)
+                                          (cons r)
+                                          gen/mix
+                                          (gen/delay 1/10)
+                                          std-gen)
+                          :checker (checker/compose
+                                    {:timeline timeline/html
+                                     :counter checker/counter
+                                     :latency (checker/latency-graph
+                                               "report")})})
+         opts))
 
-(def halves-test
-  (cql-counter-test "halves"
-                    {:nemesis (nemesis/partition-random-halves)}))
+(def bridge-inc-test
+  (cql-counter-inc-test "bridge"
+                        {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))}))
 
-(def isolate-node-test
-  (cql-counter-test "isolate node"
-                    {:nemesis (nemesis/partition-random-node)}))
+(def halves-inc-test
+  (cql-counter-inc-test "halves"
+                        {:nemesis (nemesis/partition-random-halves)}))
 
-(def crash-subset-test
-  (cql-counter-test "crash"
-                    {:nemesis crash-nemesis}))
+(def isolate-node-inc-test
+  (cql-counter-inc-test "isolate node"
+                        {:nemesis (nemesis/partition-random-node)}))
+
+(def crash-subset-inc-test
+  (cql-counter-inc-test "crash"
+                        {:nemesis crash-nemesis}))
+
+(def bridge-inc-dec-test
+  (cql-counter-inc-dec-test "bridge"
+                        {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))}))
+
+(def halves-inc-dec-test
+  (cql-counter-inc-dec-test "halves"
+                        {:nemesis (nemesis/partition-random-halves)}))
+
+(def isolate-node-inc-dec-test
+  (cql-counter-inc-dec-test "isolate node"
+                        {:nemesis (nemesis/partition-random-node)}))
+
+(def crash-subset-inc-dec-test
+  (cql-counter-inc-dec-test "crash"
+                        {:nemesis crash-nemesis}))
