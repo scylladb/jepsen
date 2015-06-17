@@ -10,13 +10,13 @@
 ;  (run-set-test! (cql-set-test "no nemesis" {})))
 
 (deftest cql-set-test-bridge
-  (run-set-test! bridge-test))
+  (run-set-test! bridge-test timestamp))
 
 (deftest cql-set-test-isolate-node
-  (run-set-test! isolate-node-test))
+  (run-set-test! isolate-node-test timestamp))
 
 (deftest cql-set-test-halves
-  (run-set-test! halves-test))
+  (run-set-test! halves-test timestamp))
 
 (deftest cql-set-test-crash-subset
-  (run-set-test! crash-subset-test))
+  (run-set-test! crash-subset-test timestamp))

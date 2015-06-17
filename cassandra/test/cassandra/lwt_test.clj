@@ -7,13 +7,13 @@
              [report :as report]]))
 
 (deftest lwt-test-bridge
-  (run-cas-register-test! bridge-test))
+  (run-cas-register-test! bridge-test timestamp))
 
 (deftest lwt-test-isolate-node
-  (run-cas-register-test! isolate-node-test))
+  (run-cas-register-test! isolate-node-test timestamp))
 
 (deftest lwt-test-halves
-  (run-cas-register-test! halves-test))
+  (run-cas-register-test! halves-test timestamp))
 
 (deftest lwt-test-crash-subset
-  (run-cas-register-test! crash-subset-test))
+  (run-cas-register-test! crash-subset-test timestamp))
