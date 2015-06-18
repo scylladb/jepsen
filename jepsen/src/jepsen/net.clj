@@ -17,9 +17,9 @@
   "Default iptables (assumes we control everything)."
   (reify Net
     (drop! [net test src dest]
-      (on dest (su (exec :iptables :-A :INPUT :-s (control.net/ip src) :-j :DROP))))
+      (on dest (su (exec :iptables :--wait :-A :INPUT :-s (control.net/ip src) :-j :DROP))))
 
     (heal! [net test]
       (on-many (:nodes test) (su
-                               (exec :iptables :-F)
-                               (exec :iptables :-X))))))
+                               (exec :iptables :--wait :-F)
+                               (exec :iptables :--wait :-X))))))
