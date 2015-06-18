@@ -24,6 +24,7 @@ bench/**
 */checkouts/**
 */store/**
 */report/**
+*/report*/**
 */timeline.html
 */resources/datomic/download-key
 */resources/datomic/riak-transactor.properties
