@@ -29,6 +29,15 @@
            (com.datastax.driver.core.policies RetryPolicy
                                               RetryPolicy$RetryDecision)))
 
+(defn scaled
+  "Applies a scaling factor to a number - used for durations
+  throughout testing to easicaly scale the run time of the whole
+  test suite. Accepts doubles."
+  [v]
+  (let [factor (or (some-> (System/getenv "JEPSEN_SCALE") (Double/parseDouble))
+                   1)]
+    (Math/ceil (* v factor))))
+
 (defn wait-for-recovery
   "Waits for the driver to report all nodes are up"
   [timeout-secs conn]
@@ -169,6 +178,14 @@
     (teardown! [_ test node]
       (wipe! node))))
 
+(defn recover
+  "A generator which stops the nemesis and allows some time for recovery."
+  []
+  (gen/nemesis
+   (gen/phases
+    (gen/once {:type :info, :f :stop})
+    (gen/sleep 10))))
+
 (defn std-gen
   "Takes a client generator and wraps it in a typical schedule and nemesis
   causing failover."
@@ -176,16 +193,15 @@
   (gen/phases
    (->> gen
         (gen/nemesis
-         (gen/seq (cycle [(gen/sleep 20)
+         (gen/seq (cycle [(gen/sleep (scaled 20))
                           {:type :info :f :start}
-                          (gen/sleep 60)
+                          (gen/sleep (scaled 60))
                           {:type :info :f :stop}])))
-        (gen/time-limit 600))
-                                        ; Recover
-                                        ; Wait for resumption of normal ops
+        (gen/time-limit (scaled 600)))
+   (recover)
    (gen/clients
     (->> gen
-         (gen/time-limit 60)))))
+         (gen/time-limit (scaled 60))))))
 
 (def add {:type :invoke :f :add :value 1})
 (def sub {:type :invoke :f :add :value -1})
@@ -205,14 +221,6 @@
   []
   (gen/clients
    (gen/once r)))
-
-(defn recover
-  "A generator which stops the nemesis and allows some time for recovery."
-  []
-  (gen/nemesis
-   (gen/phases
-    (gen/once {:type :info, :f :stop})
-    (gen/sleep 20))))
 
 (defn mostly-small-nonempty-subset
   "Returns a subset of the given collection, with a logarithmically decreasing

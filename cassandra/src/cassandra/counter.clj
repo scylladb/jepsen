@@ -35,7 +35,6 @@
 (defrecord CQLCounterClient [conn]
   client/Client
   (setup! [_ test node]
-    (Thread/sleep 20000)
     (locking setup-lock
       (let [conn (cassandra/connect (->> test :nodes (map name)))]
         (cql/create-keyspace conn "jepsen_keyspace"
@@ -114,7 +113,6 @@
                          {:client (cql-counter-client)
                           :model nil
                           :generator (->> (take 100 (cycle [add sub]))
-                                          (cons r)
                                           (cons r)
                                           gen/mix
                                           (gen/delay 1/10)

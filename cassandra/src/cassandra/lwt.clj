@@ -33,12 +33,13 @@
                                                 ReadTimeoutException
                                                 NoHostAvailableException)))
 
-(def ak (keyword "[applied]")) ;this is the name C* returns
+(def ak (keyword "[applied]")) ;this is the name C* returns, define now because
+                               ;it isn't really a valid keyword from reader's
+                               ;perspective
 
 (defrecord CasRegisterClient [conn]
   client/Client
   (setup! [_ test node]
-    (Thread/sleep 20000)
     (locking setup-lock
       (let [conn (cassandra/connect (->> test :nodes (map name)))]
         (cql/create-keyspace conn "jepsen_keyspace"

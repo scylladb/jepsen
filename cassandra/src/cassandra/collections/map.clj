@@ -35,7 +35,6 @@
 (defrecord CQLMapClient [conn]
   client/Client
   (setup! [_ test node]
-    (Thread/sleep 20000)
     (locking setup-lock
       (let [conn (cassandra/connect (->> test :nodes (map name)))]
         (cql/create-keyspace conn "jepsen_keyspace"
@@ -102,13 +101,7 @@
                                       (->> (adds)
                                            (gen/stagger 1/10)
                                            (gen/delay 1/2)
-                                           (gen/nemesis
-                                            (gen/seq (cycle
-                                                      [(gen/sleep 10)
-                                                       {:type :info :f :start}
-                                                       (gen/sleep 120)
-                                                       {:type :info :f :stop}])))
-                                           (gen/time-limit 600))
+                                           std-gen)
                                       (read-once))
                           :checker (checker/compose
                                     {:timeline timeline/html
