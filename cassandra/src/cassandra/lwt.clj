@@ -81,10 +81,13 @@
                                            (where [[= :id 0]]))]
                     (if (-> result first ak)
                       (assoc op :type :ok)
-                      (do (cql/insert conn "lwt" {:id 0
-                                                  :value v'}
-                                      (if-not-exists))
-                          (assoc op :type :ok))))
+                      (do
+                        (info "This is our first write, so we need to insert")
+                        (info "This log message should only appear once")
+                        (cql/insert conn "lwt" {:id 0
+                                                :value v'}
+                                    (if-not-exists))
+                        (assoc op :type :ok))))
                   (catch UnavailableException e
                     (assoc op :type :fail :error (.getMessage e)))
                   (catch ReadTimeoutException e
