@@ -51,7 +51,7 @@
         (cql/insert conn "maps"
                     {:id 0
                      :elements {}})
-        (CQLMapClient. conn))))
+        (CQLMapClient-> conn))))
   (invoke! [this test op]
     (case (:f op)
       :add (try (with-consistency-level ConsistencyLevel/ONE

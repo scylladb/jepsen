@@ -53,7 +53,7 @@
                           (column-definitions {:id :int
                                                :value :int
                                                :primary-key [:id]}))
-        (CasRegisterClient. conn))))
+        (CasRegisterClient-> conn))))
   (invoke! [this test op]
     (case (:f op)
       :cas (try (let [[v v'] (:value op)
