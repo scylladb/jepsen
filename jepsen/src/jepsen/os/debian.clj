@@ -26,8 +26,10 @@
 (defn time-since-last-update
   "When did we last run an apt-get update, in seconds ago"
   []
-  (- (Long/parseLong (c/exec :date "+%s"))
-     (Long/parseLong (c/exec :stat :-c "%Y" "/var/cache/apt/pkgcache.bin"))))
+  (try (- (Long/parseLong (c/exec :date "+%s"))
+          (Long/parseLong (c/exec :stat :-c "%Y" "/var/cache/apt/pkgcache.bin")))
+       (catch RuntimeException e
+         Long/MAX_VALUE)))
 
 (defn update!
   "Apt-get update."

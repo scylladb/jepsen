@@ -97,9 +97,11 @@
      :echo
      "deb-src http://ppa.launchpad.net/webupd8team/java/ubuntu trusty main"
      :>> "/etc/apt/sources.list.d/webupd8team-java.list")
-    (c/exec :apt-key :adv :--keyserver "hkp://keyserver.ubuntu.com:80"
-            :--recv-keys "EEA14886")
-    (debian/update!)
+    (try (c/exec :apt-key :adv :--keyserver "hkp://keyserver.ubuntu.com:80"
+                :--recv-keys "EEA14886")
+         (debian/update!)
+         (catch RuntimeException e
+           (info "Error updating caused by" e)))
     (c/exec :echo
             "debconf shared/accepted-oracle-license-v1-1 select true"
             | :debconf-set-selections)
