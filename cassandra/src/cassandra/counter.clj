@@ -48,7 +48,7 @@
                           (column-definitions {:id :int
                                                :count :counter
                                                :primary-key [:id]}))
-        (CQLCounterClient-> conn))))
+        (->CQLCounterClient conn))))
   (invoke! [this test op]
     (case (:f op)
       :add (try (do

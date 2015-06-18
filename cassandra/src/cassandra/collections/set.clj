@@ -51,7 +51,7 @@
         (cql/insert conn "sets"
                     {:id 0
                      :elements #{}})
-        (CQLSetClient-> conn))))
+        (->CQLSetClient conn))))
   (invoke! [this test op]
     (case (:f op)
       :add (try (with-consistency-level ConsistencyLevel/ONE
