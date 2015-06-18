@@ -206,29 +206,37 @@
               (case [(:type op) (:f op)]
                 [:invoke :read]
                 (recur history lower upper
-                       (assoc pending-reads (:process op) [lower (:value op)])
+                       (assoc pending-reads (:process op) [[lower upper]])
                        reads)
 
                 [:ok :read]
-                (let [r (get pending-reads (:process op))]
+                (let [read-ranges (get pending-reads (:process op))
+                      v (:value op)
+                      [l' u'] (first read-ranges)
+                      read (or (some (fn [[l u]] (when (<= l v u) [l v u])) read-ranges)
+                               [l' v u'])]
                   (recur history lower upper
                          (dissoc pending-reads (:process op))
-                         (conj reads (conj r upper))))
+                         (conj reads read)))
 
                 [:invoke :add]
                 (let [value (:value op)
                       [l' u'] (if (> value 0) [lower (+ upper value)] [(+ lower value) upper])]
-                  (recur history l' u' pending-reads reads))
+                  (recur history l' u' (reduce-kv #(assoc %1 %2 (conj %3 [l' u']))
+                                                  {} pending-reads)
+                         reads))
 
                 [:fail :add]
                 (let [value (:value op)
                       [l' u'] (if (> value 0) [lower (- upper value)] [(- lower value) upper])]
-                  (recur history l' u' pending-reads reads))
+                  (recur history l' u' (reduce-kv #(assoc %1 %2 (conj %3 [l' u']))
+                                                  {} pending-reads) reads))
 
                 [:ok :add]
                 (let [value (:value op)
                       [l' u'] (if (> value 0) [(+ lower value) upper] [lower (+ upper value)])]
-                  (recur history l' u' pending-reads reads))
+                  (recur history l' u' (reduce-kv #(assoc %1 %2 (conj %3 [l' u']))
+                                                  {} pending-reads) reads))
 
                 (recur history lower upper pending-reads reads))))))))
 
