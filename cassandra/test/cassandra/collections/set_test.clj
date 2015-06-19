@@ -6,8 +6,8 @@
             [jepsen [core :as jepsen]
              [report :as report]]))
 
-;(deftest cql-set-test-no-nemesis
-;  (run-set-test! (cql-set-test "no nemesis" {})))
+(comment (deftest cql-set-test-no-nemesis
+           (run-set-test! (cql-set-test "no nemesis" {}) timestamp)))
 
 (deftest cql-set-test-bridge
   (run-set-test! bridge-test timestamp))
