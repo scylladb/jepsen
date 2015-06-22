@@ -3,12 +3,13 @@
   tests, creating and resolving failures, and interpreting results.
 
   Jepsen tests a system by running a set of singlethreaded *processes*, each
-  representing a single client in the system, and a special *nemesis* process,
-  which induces failures across the cluster. Processes choose operations to
+  representing a single client in the system, a special *nemesis* process, which
+  induces failures across the cluster, and a special *conductor* process which
+  induces lifecycle changes in the cluster. Processes choose operations to
   perform based on a *generator*. Each process uses a *client* to apply the
-  operation to the distributed system, and records the invocation and
-  completion of that operation in the *history* for the test. When the test is
-  complete, a *checker* analyzes the history to see if it made sense.
+  operation to the distributed system, and records the invocation and completion
+  of that operation in the *history* for the test. When the test is complete, a
+  *checker* analyzes the history to see if it made sense.
 
   Jepsen automates the setup and teardown of the environment and distributed
   system by using an *OS* and *client* respectively. See `run!` for details."
@@ -170,18 +171,18 @@
                     (+ process (count (:nodes test)))))))))
         (info "Worker" process "done")))))
 
-(defn nemesis-worker
-  "Starts the nemesis thread, which draws failures from the generator and
-  evaluates them. Returns a future."
-  [test nemesis]
+(defn conductor-worker
+  "Starts a thread that runs a client which draws cluster-affecting events
+  from the generator and evaluates them. Returns a future."
+  [test client type]
   (let [gen       (:generator        test)
         histories (:active-histories test)]
     (future
-      (with-thread-name "jepsen nemesis"
+      (with-thread-name (str "jepsen " type)
         (loop []
-          (when-let [op (generator/op gen test :nemesis)]
+          (when-let [op (generator/op gen test type)]
             (let [op (assoc op
-                            :process :nemesis
+                            :process type
                             :time    (relative-time-nanos))]
               ; Log invocation in all histories of all currently running cases
               (doseq [history @histories]
@@ -189,11 +190,11 @@
 
               (try
                 (util/log-op op)
-                (let [completion (-> (client/invoke! nemesis test op)
+                (let [completion (-> (client/invoke! client test op)
                                      (assoc :time (relative-time-nanos)))]
                   (util/log-op completion)
 
-                  ; Nemesis is not allowed to affect the model
+                  ; Effect workers are not allowed to affect the model
                   (assert (= (:type op)    :info))
                   (assert (= (:f op)       (:f completion)))
                   (assert (= (:process op) (:process completion)))
@@ -208,26 +209,32 @@
                     (swap! history conj (assoc op
                                                :time  (relative-time-nanos)
                                                :value (str "crashed: " t))))
-                  (warn t "Nemesis crashed evaluating" op)))
+                  (warn t type "crashed evaluating" op)))
 
               (recur))))
-        (info "nemesis done")))))
+        (info type " done")))))
 
-(defmacro with-nemesis
-  "Sets up nemesis, starts nemesis worker thread, evaluates body, waits for
-  nemesis completion, and tears down nemesis."
+(defn launch-conductor
+  "Creates a client for a conductor from a [name impl] vector and test and then
+  starts the thread. Returns a [client future] vector."
+  [test [name impl]]
+  (let [client (client/setup! impl test nil)]
+    [client (conductor-worker test client name)]))
+
+(defmacro with-conductors
+  "Sets up conductors, starts conductor worker threads, evaluates body, waits
+  for conductor completions, and tears down conductors."
   [test & body]
-  ; Initialize nemesis
-  `(let [nemesis# (client/setup! (:nemesis ~test) ~test nil)]
+  ; Initialize conductors
+  `(let [[clients# workers#] (map (partial launch-conductor ~test)
+                                  (-> ~test :conductors))]
      (try
-       ; Launch nemesis thread
-       (let [worker# (nemesis-worker ~test nemesis#)
-             result# ~@body]
-         ; Wait for nemesis worker to complete
-         (deref worker#)
+       (let [result# ~@body]
+                                        ; Wait for conductor workers to complete
+         (doseq [w# workers#] (deref w#))
          result#)
        (finally
-         (client/teardown! nemesis# ~test)))))
+         (doseq [c# clients#] #(client/teardown! c# ~test))))))
 
 (defn run-case!
   "Spawns clients, runs a single test case, and returns that case's history."
@@ -270,7 +277,7 @@
   :os         The operating system; given by the OS protocol
   :db         The database to configure: given by the DB protocol
   :client     A client for the database
-  :nemesis    A client for failures
+  :conductors A map from client names to clients for conducting
   :generator  A generator of operations to apply to the DB
   :model      The model used to verify the history is correct
   :checker    Verifies that the history is valid
@@ -283,7 +290,7 @@
     - If the DB supports the Primary protocol, also perform the Primary setup
       on the first node.
 
-  3. Create the nemesis
+  3. Create the conductors
 
   4. Fork the client into one client for each node
 
@@ -324,12 +331,15 @@
 
             ; Setup
             (with-os test
+              (info "inside os")
               (with-db test
+                (info "inside db")
                 (binding [generator/*threads*
-                          (cons :nemesis (range (count (:nodes test))))]
+                          (into (-> test :conductors keys)
+                                (range (count (:nodes test))))]
+                  (info "inside binding")
                   (util/with-relative-time
-                    (with-nemesis test
-
+                    (with-conductors test
                       ; Run a single case
                       (let [test (assoc test :history (run-case! test))
                             ; Remove state

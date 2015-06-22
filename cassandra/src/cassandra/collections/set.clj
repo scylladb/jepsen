@@ -115,16 +115,16 @@
 
 (def bridge-test
   (cql-set-test "bridge"
-                {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))}))
+                {:conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))}}))
 
 (def halves-test
   (cql-set-test "halves"
-                {:nemesis (nemesis/partition-random-halves)}))
+                {:conductors {:nemesis (nemesis/partition-random-halves)}}))
 
 (def isolate-node-test
   (cql-set-test "isolate node"
-                {:nemesis (nemesis/partition-random-node)}))
+                {:conductors {:nemesis (nemesis/partition-random-node)}}))
 
 (def crash-subset-test
   (cql-set-test "crash"
-                {:nemesis crash-nemesis}))
+                {:conductors {:nemesis crash-nemesis}}))

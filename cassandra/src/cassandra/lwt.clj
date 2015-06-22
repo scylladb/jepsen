@@ -145,16 +145,16 @@
 
 (def bridge-test
   (cas-register-test "bridge"
-                     {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))}))
+                     {:conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))}}))
 
 (def halves-test
   (cas-register-test "halves"
-                     {:nemesis (nemesis/partition-random-halves)}))
+                     {:conductors {:nemesis (nemesis/partition-random-halves)}}))
 
 (def isolate-node-test
   (cas-register-test "isolate node"
-                     {:nemesis (nemesis/partition-random-node)}))
+                     {:conductors {:nemesis (nemesis/partition-random-node)}}))
 
 (def crash-subset-test
   (cas-register-test "crash"
-                     {:nemesis crash-nemesis}))
+                     {:conductors {:nemesis crash-nemesis}}))

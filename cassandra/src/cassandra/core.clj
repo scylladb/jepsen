@@ -139,7 +139,8 @@
                 "\"s/commitlog_sync_period_in_ms: .*/#/g\""
                 "\"/auto_bootstrap: .*/d\""]]
      (c/exec :sed :-i (lit rep) "~/cassandra/conf/cassandra.yaml"))
-   (c/exec :echo "auto_bootstrap: false" :>> "~/cassandra/conf/cassandra.yaml")))
+   (c/exec :echo (str "auto_bootstrap: " (-> test :bootstrap node boolean))
+           :>> "~/cassandra/conf/cassandra.yaml")))
 
 (defn start!
   "Starts Cassandra."
@@ -254,5 +255,5 @@
   (merge tests/noop-test
          {:name    (str "cassandra " name)
           :os      debian/os
-          :db      (db "2.1.6")}
+          :db      (db "2.1.7")}
          opts))
