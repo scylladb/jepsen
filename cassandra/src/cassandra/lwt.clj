@@ -25,7 +25,8 @@
             [clojurewerkz.cassaforte.query :refer :all]
             [clojurewerkz.cassaforte.policies :refer :all]
             [clojurewerkz.cassaforte.cql :as cql]
-            [cassandra.core :refer :all])
+            [cassandra.core :refer :all]
+            [cassandra.checker :as extra-checker])
   (:import (clojure.lang ExceptionInfo)
            (com.datastax.driver.core ConsistencyLevel)
            (com.datastax.driver.core.exceptions UnavailableException
@@ -62,7 +63,7 @@
                                          (where [[= :id 0]]))]
                   (if (-> result first ak)
                     (assoc op :type :ok)
-                    (assoc op :type :fail)))
+                    (assoc op :type :fail :value (-> result first :value))))
                 (catch UnavailableException e
                   (assoc op :type :fail :error (.getMessage e)))
                 (catch ReadTimeoutException e
@@ -84,7 +85,7 @@
                       (let [result' (cql/insert conn "lwt" {:id 0
                                                             :value v'}
                                                 (if-not-exists))]
-                        (if (-> result first ak)
+                        (if (-> result' first ak)
                           (assoc op :type :ok)
                           (assoc op :type :fail)))))
                   (catch UnavailableException e
@@ -140,7 +141,7 @@
                                            (gen/time-limit 50))
                                       gen/void)
                           :checker (checker/compose
-                                    {:linear checker/linearizable})})
+                                    {:linear extra-checker/enhanced-linearizable})})
          opts))
 
 (def bridge-test
