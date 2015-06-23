@@ -96,7 +96,8 @@
 (defn save!
   "Writes a test to disk. Returns test."
   [test]
-  (let [test (dissoc test :db :os :net :client :checker :nemesis :generator :model)
+  (let [test (dissoc test :db :os :net :client :checker :nemesis :generator :model
+                     :conductors)
         path (path test)]
     (io/make-parents path)
     (with-open [file   (io/output-stream path)
