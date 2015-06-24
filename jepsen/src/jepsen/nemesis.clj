@@ -174,11 +174,11 @@
                  (case (:f op)
                    :start (if-let [ns (-> test :nodes targeter util/coll)]
                             (if (compare-and-set! nodes nil ns)
-                              (c/on-many ns (start! test c/*host*))
+                              (c/on-many ns (start! test (keyword c/*host*)))
                               (str "nemesis already disrupting " @nodes))
                             :no-target)
                    :stop (if-let [ns @nodes]
-                           (let [value (c/on-many ns (stop! test c/*host*))]
+                           (let [value (c/on-many ns (stop! test (keyword c/*host*)))]
                              (reset! nodes nil)
                              value)
                            :not-started)))))
