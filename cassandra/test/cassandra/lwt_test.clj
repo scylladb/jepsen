@@ -6,14 +6,14 @@
             [jepsen [core :as jepsen]
              [report :as report]]))
 
-(deftest lwt-test-bridge
+(deftest lwt-bridge
   (run-cas-register-test! bridge-test timestamp))
 
-(deftest lwt-test-isolate-node
+(deftest lwt-isolate-node
   (run-cas-register-test! isolate-node-test timestamp))
 
-(deftest lwt-test-halves
+(deftest lwt-halves
   (run-cas-register-test! halves-test timestamp))
 
-(deftest lwt-test-crash-subset
+(deftest lwt-crash-subset
   (run-cas-register-test! crash-subset-test timestamp))

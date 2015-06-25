@@ -6,14 +6,14 @@
             [jepsen [core :as jepsen]
              [report :as report]]))
 
-(deftest cql-map-test-bridge
+(deftest cql-map-bridge
   (run-set-test! bridge-test timestamp))
 
-(deftest cql-map-test-isolate-node
+(deftest cql-map-isolate-node
   (run-set-test! isolate-node-test timestamp))
 
-(deftest cql-map-test-halves
+(deftest cql-map-halves
   (run-set-test! halves-test timestamp))
 
-(deftest cql-map-test-crash-subset
+(deftest cql-map-crash-subset
   (run-set-test! crash-subset-test timestamp))

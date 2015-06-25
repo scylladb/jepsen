@@ -6,17 +6,17 @@
             [jepsen [core :as jepsen]
              [report :as report]]))
 
-(comment (deftest cql-set-test-no-nemesis
+(comment (deftest cql-set-no-nemesis
            (run-set-test! (cql-set-test "no nemesis" {}) timestamp)))
 
-(deftest cql-set-test-bridge
+(deftest cql-set-bridge
   (run-set-test! bridge-test timestamp))
 
-(deftest cql-set-test-isolate-node
+(deftest cql-set-isolate-node
   (run-set-test! isolate-node-test timestamp))
 
-(deftest cql-set-test-halves
+(deftest cql-set-halves
   (run-set-test! halves-test timestamp))
 
-(deftest cql-set-test-crash-subset
+(deftest cql-set-crash-subset
   (run-set-test! crash-subset-test timestamp))
