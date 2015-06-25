@@ -194,7 +194,7 @@
                                      (assoc :time (relative-time-nanos)))]
                   (util/log-op completion)
 
-                  ; Effect workers are not allowed to affect the model
+                  ; Conductor workers are not allowed to affect the model
                   (assert (= (:type op)    :info))
                   (assert (= (:f op)       (:f completion)))
                   (assert (= (:process op) (:process completion)))
@@ -226,15 +226,16 @@
   for conductor completions, and tears down conductors."
   [test & body]
   ; Initialize conductors
-  `(let [[clients# workers#] (map (partial launch-conductor ~test)
-                                  (-> ~test :conductors))]
+  `(let [client-worker-pairs# (doall (map (partial launch-conductor ~test)
+                                          (-> ~test :conductors)))
+         workers# (map second client-worker-pairs#)
+         clients# (map first client-worker-pairs#)]
      (try
        (let [result# ~@body]
-                                        ; Wait for conductor workers to complete
          (doseq [w# workers#] (deref w#))
          result#)
        (finally
-         (doseq [c# clients#] #(client/teardown! c# ~test))))))
+         (doseq [c# clients#] (client/teardown! c# ~test))))))
 
 (defn run-case!
   "Spawns clients, runs a single test case, and returns that case's history."
@@ -331,13 +332,10 @@
 
             ; Setup
             (with-os test
-              (info "inside os")
               (with-db test
-                (info "inside db")
                 (binding [generator/*threads*
                           (into (-> test :conductors keys)
                                 (range (count (:nodes test))))]
-                  (info "inside binding")
                   (util/with-relative-time
                     (with-conductors test
                       ; Run a single case
