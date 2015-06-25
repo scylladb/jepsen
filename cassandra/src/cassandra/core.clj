@@ -145,9 +145,10 @@
 (defn start!
   "Starts Cassandra."
   [node test]
-  (info node "starting Cassandra")
-  (c/su
-   (c/exec (lit "~/cassandra/bin/cassandra"))))
+  (when-not (node (:bootstrap test))
+    (info node "starting Cassandra")
+    (c/su
+     (c/exec (lit "~/cassandra/bin/cassandra")))))
 
 (defn stop!
   "Stops Cassandra."
@@ -187,6 +188,15 @@
     (gen/once {:type :info, :f :stop})
     (gen/sleep 10))))
 
+(defn bootstrap
+  "A generator that bootstraps nodes into the cluster with the given pause
+  and routes other :op's onward."
+  [pause src-gen]
+  (gen/conductor :bootstrap
+                 (gen/seq (cycle [(gen/sleep pause)
+                                  {:type :info :f :bootstrap}]))
+                 src-gen))
+
 (defn std-gen
   "Takes a client generator and wraps it in a typical schedule and nemesis
   causing failover."
@@ -198,6 +208,7 @@
                           {:type :info :f :start}
                           (gen/sleep (scaled 60))
                           {:type :info :f :stop}])))
+        (bootstrap 120)
         (gen/time-limit (scaled 600)))
    (recover)
    (gen/clients
