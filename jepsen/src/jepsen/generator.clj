@@ -262,8 +262,12 @@
 
 (defn clients
   "Executes generator only on clients."
-  ([client-gen]
-   (on (complement #{:nemesis}) client-gen)))
+  [client-gen]
+  (reify Generator
+    (op [gen test process]
+      (when (->> test :nodes (into #{}) process)
+        (binding [*threads* (c/filter (into #{} (:nodes test)) *threads*)]
+          (op client-gen test process))))))
 
 (defn synchronize
   "Blocks until all nodes are blocked awaiting operations from this generator,
