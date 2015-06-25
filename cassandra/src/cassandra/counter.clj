@@ -48,6 +48,8 @@
                           (column-definitions {:id :int
                                                :count :counter
                                                :primary-key [:id]}))
+        (cql/update conn "counters" {:count (increment-by 0)}
+                    (where [[= :id 0]]))
         (->CQLCounterClient conn))))
   (invoke! [this test op]
     (case (:f op)
