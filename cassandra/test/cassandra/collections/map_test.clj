@@ -17,3 +17,14 @@
 
 (deftest cql-map-crash-subset
   (run-set-test! crash-subset-test timestamp))
+
+(deftest constant-cluster-tests
+  (cql-map-bridge)
+  (cql-map-isolate-node)
+  (cql-map-halves)
+  (cql-map-crash-subset))
+
+;; Tests to run by default with lein test for this namespace
+(defn test-ns-hook
+  []
+  (constant-cluster-tests))
