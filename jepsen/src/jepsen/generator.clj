@@ -244,6 +244,13 @@
             op
             (recur sources)))))))
 
+(defn conductor
+  "Combines a generator of normal operations and a generator for a conductor.
+  The name of the conductor is given."
+  [conductor conductor-gen src-gen]
+  (concat (on #{conductor} conductor-gen)
+          (on (complement #{conductor}) src-gen)))
+
 (defn nemesis
   "Combines a generator of normal operations and a generator for nemesis
   operations into one. When the process requesting an operation is :nemesis,
@@ -251,8 +258,7 @@
   ([nemesis-gen]
    (on #{:nemesis} nemesis-gen))
   ([nemesis-gen client-gen]
-   (concat (on #{:nemesis} nemesis-gen)
-           (on (complement #{:nemesis}) client-gen))))
+   (conductor :nemesis nemesis-gen client-gen)))
 
 (defn clients
   "Executes generator only on clients."
