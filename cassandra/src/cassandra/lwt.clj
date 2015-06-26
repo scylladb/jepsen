@@ -134,12 +134,13 @@
                                            (gen/delay 1)
                                            (gen/nemesis
                                             (gen/seq (cycle
-                                                      [(gen/sleep 5)
+                                                      [(gen/sleep 6)
                                                        {:type :info :f :stop}
-                                                       (gen/sleep 15)
+                                                       (gen/sleep 12)
                                                        {:type :info :f :start}
                                                        ])))
-                                           (gen/time-limit 50))
+                                           (bootstrap 10)
+                                           (gen/time-limit 45))
                                       gen/void)
                           :checker (checker/compose
                                     {:linear extra-checker/enhanced-linearizable})})
