@@ -139,7 +139,7 @@
                                                        (gen/sleep 12)
                                                        {:type :info :f :start}
                                                        ])))
-                                           (bootstrap 10)
+                                           (bootstrap 2)
                                            (gen/time-limit 45))
                                       gen/void)
                           :checker (checker/compose
