@@ -142,13 +142,20 @@
    (c/exec :echo (str "auto_bootstrap: " (-> test :bootstrap node boolean))
            :>> "~/cassandra/conf/cassandra.yaml")))
 
+
+
 (defn start!
   "Starts Cassandra."
   [node test]
+  (info node "starting Cassandra")
+  (c/su
+   (c/exec (lit "~/cassandra/bin/cassandra"))))
+
+(defn initial-start!
+  "Starts Cassandra in DB lifecycle."
+  [node test]
   (when-not (node (:bootstrap test))
-    (info node "starting Cassandra")
-    (c/su
-     (c/exec (lit "~/cassandra/bin/cassandra")))))
+    (start! node test)))
 
 (defn stop!
   "Stops Cassandra."
@@ -175,7 +182,7 @@
       (doto node
         (install! version)
         (configure! test)
-        (start! test)))
+        (initial-start! test)))
 
     (teardown! [_ test node]
       (wipe! node))))
@@ -192,7 +199,7 @@
   "A generator that bootstraps nodes into the cluster with the given pause
   and routes other :op's onward."
   [pause src-gen]
-  (gen/conductor :bootstrap
+  (gen/conductor :bootstrapper
                  (gen/seq (cycle [(gen/sleep pause)
                                   {:type :info :f :bootstrap}]))
                  src-gen))
