@@ -151,10 +151,11 @@
   (c/su
    (c/exec (lit "~/cassandra/bin/cassandra"))))
 
-(defn initial-start!
-  "Starts Cassandra in DB lifecycle."
+(defn guarded-start!
+  "Guarded start that only starts nodes that have joined the cluster already
+  through initial DB lifecycle or a bootstrap."
   [node test]
-  (when-not (node (:bootstrap test))
+  (when-not (node @(:bootstrap test))
     (start! node test)))
 
 (defn stop!
@@ -182,7 +183,7 @@
       (doto node
         (install! version)
         (configure! test)
-        (initial-start! test)))
+        (guarded-start! test)))
 
     (teardown! [_ test node]
       (wipe! node))))
@@ -265,8 +266,8 @@
   "A nemesis that crashes a random subset of nodes."
   (nemesis/node-start-stopper
    mostly-small-nonempty-subset
-   (fn start [test node] (c/su (c/exec :killall :-9 :java)) [:killed node])
-   (fn stop  [test node] (start! node test) [:restarted node])))
+   (fn start [test node] (meh (c/su (c/exec :killall :-9 :java))) [:killed node])
+   (fn stop  [test node] (guarded-start! node test) [:restarted node])))
 
 (defn cassandra-test
   [name opts]
