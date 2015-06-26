@@ -129,24 +129,24 @@
 
 (def bridge-test-bootstrap
   (cql-map-test "bridge bootstrap"
-                {:bootstrap #{:n4 :n5}
+                {:bootstrap (atom #{:n4 :n5})
                  :conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))
                               :bootstrapper (conductors/bootstrapper)}}))
 
 (def halves-test-bootstrap
   (cql-map-test "halves bootstrap"
-                {:bootstrap #{:n4 :n5}
+                {:bootstrap (atom #{:n4 :n5})
                  :conductors {:nemesis (nemesis/partition-random-halves)
                               :bootstrapper (conductors/bootstrapper)}}))
 
 (def isolate-node-test-bootstrap
   (cql-map-test "isolate node bootstrap"
-                {:bootstrap #{:n4 :n5}
+                {:bootstrap (atom #{:n4 :n5})
                  :conductors {:nemesis (nemesis/partition-random-node)
                               :bootstrapper (conductors/bootstrapper)}}))
 
 (def crash-subset-test-bootstrap
   (cql-map-test "crash bootstrap"
-                {:bootstrap #{:n4 :n5}
+                {:bootstrap (atom #{:n4 :n5})
                  :conductors {:nemesis crash-nemesis
                               :bootstrapper (conductors/bootstrapper)}}))
