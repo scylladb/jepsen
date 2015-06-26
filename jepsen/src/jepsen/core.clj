@@ -34,9 +34,10 @@
   (.await ^CyclicBarrier (:barrier test)))
 
 (defn conj-op!
-  "Add an operation to a tests's history."
+  "Add an operation to a tests's history, and returns the operation."
   [test op]
-  (swap! (:history test) conj op))
+  (swap! (:history test) conj op)
+  op)
 
 (defn primary
   "Given a test, returns the primary node."
@@ -321,7 +322,7 @@
 
       ; Open SSH conns
       (control/with-ssh (:ssh test)
-        (with-resources [sessions control/session control/disconnect
+        (with-resources [sessions (bound-fn* control/session) control/disconnect
                          (:nodes test)]
 
           ; Index sessions by node name and add to test
