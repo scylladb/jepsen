@@ -6,25 +6,28 @@
             [jepsen [core :as jepsen]
              [report :as report]]))
 
-(deftest lwt-bridge
+;; Steady state cluster tests
+(deftest ^:lwt ^:steady lwt-bridge
   (run-cas-register-test! bridge-test timestamp))
 
-(deftest lwt-isolate-node
+(deftest ^:lwt ^:steady lwt-isolate-node
   (run-cas-register-test! isolate-node-test timestamp))
 
-(deftest lwt-halves
+(deftest ^:lwt ^:steady lwt-halves
   (run-cas-register-test! halves-test timestamp))
 
-(deftest lwt-crash-subset
+(deftest ^:lwt ^:steady lwt-crash-subset
   (run-cas-register-test! crash-subset-test timestamp))
 
-(deftest constant-cluster-tests
-  (lwt-bridge)
-  (lwt-isolate-node)
-  (lwt-halves)
-  (lwt-crash-subset))
+;; Bootstrapping tests
+(deftest ^:lwt ^:bootstrap lwt-bridge-bootstrap
+  (run-cas-register-test! bridge-test-bootstrap timestamp))
 
-;; Tests to run by default with lein test for this namespace
-(defn test-ns-hook
-  []
-  (constant-cluster-tests))
+(deftest ^:lwt ^:bootstrap lwt-isolate-node-bootstrap
+  (run-cas-register-test! isolate-node-test-bootstrap timestamp))
+
+(deftest ^:lwt ^:bootstrap lwt-halves-bootstrap
+  (run-cas-register-test! halves-test-bootstrap timestamp))
+
+(deftest ^:lwt ^:bootstrap lwt-crash-subset-bootstrap
+  (run-cas-register-test! crash-subset-test-bootstrap timestamp))

@@ -26,7 +26,8 @@
             [clojurewerkz.cassaforte.policies :refer :all]
             [clojurewerkz.cassaforte.cql :as cql]
             [cassandra.core :refer :all]
-            [cassandra.checker :as extra-checker])
+            [cassandra.checker :as extra-checker]
+            [cassandra.conductors :as conductors])
   (:import (clojure.lang ExceptionInfo)
            (com.datastax.driver.core ConsistencyLevel)
            (com.datastax.driver.core.exceptions UnavailableException
@@ -159,3 +160,27 @@
 (def crash-subset-test
   (cas-register-test "crash"
                      {:conductors {:nemesis crash-nemesis}}))
+
+(def bridge-test-bootstrap
+  (cas-register-test "bridge bootstrap"
+                     {:bootstrap #{:n4 :n5}
+                      :conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))
+                                   :bootstrapper (conductors/bootstrapper)}}))
+
+(def halves-test-bootstrap
+  (cas-register-test "halves bootstrap"
+                     {:bootstrap #{:n4 :n5}
+                      :conductors {:nemesis (nemesis/partition-random-halves)
+                                   :bootstrapper (conductors/bootstrapper)}}))
+
+(def isolate-node-test-bootstrap
+  (cas-register-test "isolate node bootstrap"
+                     {:bootstrap #{:n4 :n5}
+                      :conductors {:nemesis (nemesis/partition-random-node)
+                                   :bootstrapper (conductors/bootstrapper)}}))
+
+(def crash-subset-test-bootstrap
+  (cas-register-test "crash bootstrap"
+                     {:bootstrap #{:n4 :n5}
+                      :conductors {:nemesis crash-nemesis
+                                   :bootstrapper (conductors/bootstrapper)}}))

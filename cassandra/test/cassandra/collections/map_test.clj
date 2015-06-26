@@ -6,25 +6,26 @@
             [jepsen [core :as jepsen]
              [report :as report]]))
 
-(deftest cql-map-bridge
+(deftest ^:map ^:steady cql-map-bridge
   (run-set-test! bridge-test timestamp))
 
-(deftest cql-map-isolate-node
+(deftest ^:map ^:steady cql-map-isolate-node
   (run-set-test! isolate-node-test timestamp))
 
-(deftest cql-map-halves
+(deftest ^:map ^:steady cql-map-halves
   (run-set-test! halves-test timestamp))
 
-(deftest cql-map-crash-subset
+(deftest ^:map ^:steady cql-map-crash-subset
   (run-set-test! crash-subset-test timestamp))
 
-(deftest constant-cluster-tests
-  (cql-map-bridge)
-  (cql-map-isolate-node)
-  (cql-map-halves)
-  (cql-map-crash-subset))
+(deftest ^:map ^:bootstrap cql-map-bridge-bootstrap
+  (run-set-test! bridge-test-bootstrap timestamp))
 
-;; Tests to run by default with lein test for this namespace
-(defn test-ns-hook
-  []
-  (constant-cluster-tests))
+(deftest ^:map ^:bootstrap cql-map-isolate-node-bootstrap
+  (run-set-test! isolate-node-test-bootstrap timestamp))
+
+(deftest ^:map ^:bootstrap cql-map-halves-bootstrap
+  (run-set-test! halves-test-bootstrap timestamp))
+
+(deftest ^:map ^:bootstrap cql-map-crash-subset-bootstrap
+  (run-set-test! crash-subset-test-bootstrap timestamp))

@@ -24,7 +24,8 @@
             [clojurewerkz.cassaforte.query :refer :all]
             [clojurewerkz.cassaforte.policies :refer :all]
             [clojurewerkz.cassaforte.cql :as cql]
-            [cassandra.core :refer :all])
+            [cassandra.core :refer :all]
+            [cassandra.conductors :as conductors])
   (:import (clojure.lang ExceptionInfo)
            (com.datastax.driver.core ConsistencyLevel)
            (com.datastax.driver.core.exceptions UnavailableException
@@ -157,3 +158,51 @@
 (def crash-subset-inc-dec-test
   (cql-counter-inc-dec-test "crash"
                             {:conductors {:nemesis crash-nemesis}}))
+
+(def bridge-inc-test-bootstrap
+  (cql-counter-inc-test "bridge bootstrap"
+                        {:bootstrap #{:n4 :n5}
+                         :conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))
+                                      :bootstrapper (conductors/bootstrapper)}}))
+
+(def halves-inc-test-bootstrap
+  (cql-counter-inc-test "halves bootstrap"
+                        {:bootstrap #{:n4 :n5}
+                         :conductors {:nemesis (nemesis/partition-random-halves)
+                                      :bootstrapper (conductors/bootstrapper)}}))
+
+(def isolate-node-inc-test-bootstrap
+  (cql-counter-inc-test "isolate node bootstrap"
+                        {:bootstrap #{:n4 :n5}
+                         :conductors {:nemesis (nemesis/partition-random-node)
+                                      :bootstrapper (conductors/bootstrapper)}}))
+
+(def crash-subset-inc-test-bootstrap
+  (cql-counter-inc-test "crash bootstrap"
+                        {:bootstrap #{:n4 :n5}
+                         :conductors {:nemesis crash-nemesis
+                                      :bootstrapper (conductors/bootstrapper)}}))
+
+(def bridge-inc-dec-test-bootstrap
+  (cql-counter-inc-dec-test "bridge bootstrap"
+                            {:bootstrap #{:n4 :n5}
+                             :conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))
+                                          :bootstrapper (conductors/bootstrapper)}}))
+
+(def halves-inc-dec-test-bootstrap
+  (cql-counter-inc-dec-test "halves bootstrap"
+                            {:bootstrap #{:n4 :n5}
+                             :conductors {:nemesis (nemesis/partition-random-halves)
+                                          :bootstrapper (conductors/bootstrapper)}}))
+
+(def isolate-node-inc-dec-test-bootstrap
+  (cql-counter-inc-dec-test "isolate node bootstrap"
+                            {:bootstrap #{:n4 :n5}
+                             :conductors {:nemesis (nemesis/partition-random-node)
+                                          :bootstrapper (conductors/bootstrapper)}}))
+
+(def crash-subset-inc-dec-test-bootstrap
+  (cql-counter-inc-dec-test "crash bootstrap"
+                            {:bootstrap #{:n4 :n5}
+                             :conductors {:nemesis crash-nemesis
+                                          :bootstrapper (conductors/bootstrapper)}}))
