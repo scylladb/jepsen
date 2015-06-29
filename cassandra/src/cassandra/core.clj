@@ -155,7 +155,9 @@
   "Guarded start that only starts nodes that have joined the cluster already
   through initial DB lifecycle or a bootstrap."
   [node test]
-  (when-not (node @(:bootstrap test))
+  (if-let [bootstrap (:bootstrap test)]
+    (when-not (node @bootstrap)
+      (start! node test))
     (start! node test)))
 
 (defn stop!

@@ -140,7 +140,7 @@
                                                        {:type :info :f :start}
                                                        ])))
                                            (bootstrap 2)
-                                           (gen/time-limit 45))
+                                           (gen/time-limit 35))
                                       gen/void)
                           :checker (checker/compose
                                     {:linear extra-checker/enhanced-linearizable})})
