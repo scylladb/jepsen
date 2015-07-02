@@ -150,3 +150,23 @@
                 {:bootstrap (atom #{:n4 :n5})
                  :conductors {:nemesis crash-nemesis
                               :bootstrapper (conductors/bootstrapper)}}))
+
+(def bridge-test-decommission
+  (cql-map-test "bridge decommission"
+                {:conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))
+                              :decommissioner (conductors/decommissioner)}}))
+
+(def halves-test-decommission
+  (cql-map-test "halves decommission"
+                {:conductors {:nemesis (nemesis/partition-random-halves)
+                              :decommissioner (conductors/decommissioner)}}))
+
+(def isolate-node-test-decommission
+  (cql-map-test "isolate node decommission"
+                {:conductors {:nemesis (nemesis/partition-random-node)
+                              :decommissioner (conductors/decommissioner)}}))
+
+(def crash-subset-test-decommission
+  (cql-map-test "crash decommission"
+                {:conductors {:nemesis crash-nemesis
+                              :decommissioner (conductors/decommissioner)}}))

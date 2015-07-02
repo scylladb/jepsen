@@ -2,6 +2,8 @@
   (:require [clojure [pprint :refer :all]
              [string :as str]]
             [clojure.java.io :as io]
+            [clojure.java.jmx :as jmx]
+            [clojure.set :as set]
             [clojure.tools.logging :refer [debug info warn]]
             [jepsen [core      :as jepsen]
              [db        :as db]
@@ -27,7 +29,8 @@
   (:import (clojure.lang ExceptionInfo)
            (com.datastax.driver.core ConsistencyLevel)
            (com.datastax.driver.core.policies RetryPolicy
-                                              RetryPolicy$RetryDecision)))
+                                              RetryPolicy$RetryDecision)
+           (java.net InetAddress)))
 
 (defn scaled
   "Applies a scaling factor to a number - used for durations
@@ -48,6 +51,29 @@
            (while (->> (cassandra/get-hosts conn)
                        (map :is-up) and not)
              (Thread/sleep 500))))
+
+(defn dns-resolve
+  "Gets the address of a hostname"
+  [hostname]
+  (.getHostAddress (InetAddress/getByName hostname)))
+
+(defn live-nodes
+  "Get the list of live nodes from a random node in the cluster"
+  [test]
+  (some (fn [node]          
+          (try (jmx/with-connection {:host (name node) :port 7199}
+                 (jmx/read "org.apache.cassandra.db:type=StorageService"
+                           :LiveNodes))
+               (catch Exception e
+                 (info "Couldn't get status from node" node))))
+        (-> test :nodes set (set/difference @(:bootstrap test))
+            (#(map (comp dns-resolve name) %)) set (set/difference @(:decommission test))
+            shuffle)))
+
+(defn nodetool
+  "Run a nodetool command"
+  [node & args]
+  (c/on node (apply c/exec (lit "~/cassandra/bin/nodetool") args)))
 
 ; This policy should only be used for final reads! It tries to
 ; aggressively get an answer from an unstable cluster after
@@ -122,7 +148,11 @@
   (info node "configuring Cassandra")
   (c/su
    (doseq [rep ["\"s/#MAX_HEAP_SIZE=.*/MAX_HEAP_SIZE='512M'/g\""
-                "\"s/#HEAP_NEWSIZE=.*/HEAP_NEWSIZE='128M'/g\""]]
+                "\"s/#HEAP_NEWSIZE=.*/HEAP_NEWSIZE='128M'/g\""
+                "\"s/LOCAL_JMX=yes/LOCAL_JMX=no/g\""
+                (str "'s/JVM_OPTS=\"$JVM_OPTS -Dcom.sun.management.jmxremote"
+                     ".authenticate=true\"/JVM_OPTS=\"$JVM_OPTS -Dcom.sun.management"
+                     ".jmxremote.authenticate=false\"/g'")]]
      (c/exec :sed :-i (lit rep) "~/cassandra/conf/cassandra-env.sh"))
    (doseq [rep ["\"s/cluster_name: .*/cluster_name: 'jepsen'/g\""
                 "\"s/row_cache_size_in_mb: .*/row_cache_size_in_mb: 20/g\""
@@ -142,8 +172,6 @@
    (c/exec :echo (str "auto_bootstrap: " (-> test :bootstrap node boolean))
            :>> "~/cassandra/conf/cassandra.yaml")))
 
-
-
 (defn start!
   "Starts Cassandra."
   [node test]
@@ -153,12 +181,13 @@
 
 (defn guarded-start!
   "Guarded start that only starts nodes that have joined the cluster already
-  through initial DB lifecycle or a bootstrap."
+  through initial DB lifecycle or a bootstrap. It will not start decommissioned
+  nodes."
   [node test]
-  (if-let [bootstrap (:bootstrap test)]
-    (when-not (node @bootstrap)
-      (start! node test))
-    (start! node test)))
+  (let [bootstrap (:bootstrap test)
+        decommission (:decommission test)]
+    (when-not (or (node @bootstrap) (node @decommission))
+      (start! node test))))
 
 (defn stop!
   "Stops Cassandra."
@@ -219,6 +248,9 @@
                           (gen/sleep (scaled 60))
                           {:type :info :f :stop}])))
         (bootstrap 120)
+        (gen/conductor :decommissioner
+                       (gen/seq (cycle [(gen/sleep (scaled 150))
+                                        {:type :info :f :decommission}])))
         (gen/time-limit (scaled 600)))
    (recover)
    (gen/clients
@@ -276,5 +308,7 @@
   (merge tests/noop-test
          {:name    (str "cassandra " name)
           :os      debian/os
-          :db      (db "2.1.7")}
+          :db      (db "2.1.7")
+          :bootstrap (atom #{})
+          :decommission (atom #{})}
          opts))

@@ -206,3 +206,44 @@
                             {:bootstrap (atom #{:n4 :n5})
                              :conductors {:nemesis crash-nemesis
                                           :bootstrapper (conductors/bootstrapper)}}))
+
+(def bridge-inc-test-decommission
+  (cql-counter-inc-test "bridge decommission"
+                        {:conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))
+                                      :bootstrapper (conductors/bootstrapper)}}))
+
+(def halves-inc-test-decommission
+  (cql-counter-inc-test "halves decommission"
+                        {:conductors {:nemesis (nemesis/partition-random-halves)
+                                      :decommissioner (conductors/decommissioner)}}))
+
+(def isolate-node-inc-test-decommission
+  (cql-counter-inc-test "isolate node decommission"
+                        {:conductors {:nemesis (nemesis/partition-random-node)
+                                      :decommissioner (conductors/decommissioner)}}))
+
+(def crash-subset-inc-test-decommission
+  (cql-counter-inc-test "crash decommission"
+                        {:conductors {:nemesis crash-nemesis
+                                      :decommissioner (conductors/decommissioner)}}))
+
+(def bridge-inc-dec-test-decommission
+  (cql-counter-inc-dec-test "bridge decommission"
+                            {:conductors {:nemesis (nemesis/partitioner
+                                                    (comp nemesis/bridge shuffle))
+                                          :decommissioner (conductors/decommissioner)}}))
+
+(def halves-inc-dec-test-decommission
+  (cql-counter-inc-dec-test "halves decommission"
+                            {:conductors {:nemesis (nemesis/partition-random-halves)
+                                          :decommissioner (conductors/decommissioner)}}))
+
+(def isolate-node-inc-dec-test-decommission
+  (cql-counter-inc-dec-test "isolate node decommission"
+                            {:conductors {:nemesis (nemesis/partition-random-node)
+                                          :decommissioner (conductors/decommissioner)}}))
+
+(def crash-subset-inc-dec-test-decommission
+  (cql-counter-inc-dec-test "crash decommission"
+                            {:conductors {:nemesis crash-nemesis
+                                          :decommissioner (conductors/decommissioner)}}))

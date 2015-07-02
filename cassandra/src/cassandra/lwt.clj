@@ -140,6 +140,11 @@
                                                        {:type :info :f :start}
                                                        ])))
                                            (bootstrap 2)
+                                           (gen/conductor
+                                            :decommissioner
+                                            (gen/seq (cycle
+                                                      [(gen/sleep 4)
+                                                       {:type :info :f :decommission}])))
                                            (gen/time-limit 35))
                                       gen/void)
                           :checker (checker/compose
@@ -185,3 +190,23 @@
                      {:bootstrap (atom #{:n4 :n5})
                       :conductors {:nemesis crash-nemesis
                                    :bootstrapper (conductors/bootstrapper)}}))
+
+(def bridge-test-decommission
+  (cas-register-test "bridge decommission"
+                     {:conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))
+                                   :decommissioner (conductors/decommissioner)}}))
+
+(def halves-test-decommission
+  (cas-register-test "halves decommission"
+                     {:conductors {:nemesis (nemesis/partition-random-halves)
+                                   :decommissioner (conductors/decommissioner)}}))
+
+(def isolate-node-test-decommission
+  (cas-register-test "isolate node decommission"
+                     {:conductors {:nemesis (nemesis/partition-random-node)
+                                   :decommissioner (conductors/decommissioner)}}))
+
+(def crash-subset-test-decommission
+  (cas-register-test "crash decommission"
+                     {:conductors {:nemesis crash-nemesis
+                                   :decommissioner (conductors/decommissioner)}}))

@@ -31,3 +31,16 @@
 
 (deftest ^:lwt ^:bootstrap lwt-crash-subset-bootstrap
   (run-cas-register-test! crash-subset-test-bootstrap timestamp))
+
+;; Decommission tests
+(deftest ^:lwt ^:decommission lwt-bridge-decommission
+  (run-cas-register-test! bridge-test-decommission timestamp))
+
+(deftest ^:lwt ^:decommission lwt-isolate-node-decommission
+  (run-cas-register-test! isolate-node-test-decommission timestamp))
+
+(deftest ^:lwt ^:decommission lwt-halves-decommission
+  (run-cas-register-test! halves-test-decommission timestamp))
+
+(deftest ^:lwt ^:decommission lwt-crash-subset-decommission
+  (run-cas-register-test! crash-subset-test-decommission timestamp))

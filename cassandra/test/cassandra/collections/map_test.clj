@@ -29,3 +29,15 @@
 
 (deftest ^:map ^:bootstrap cql-map-crash-subset-bootstrap
   (run-set-test! crash-subset-test-bootstrap timestamp))
+
+(deftest ^:map ^:decommission cql-map-bridge-decommission
+  (run-set-test! bridge-test-decommission timestamp))
+
+(deftest ^:map ^:decommission cql-map-isolate-node-decommission
+  (run-set-test! isolate-node-test-decommission timestamp))
+
+(deftest ^:map ^:decommission cql-map-halves-decommission
+  (run-set-test! halves-test-decommission timestamp))
+
+(deftest ^:map ^:decommission cql-map-crash-subset-decommission
+  (run-set-test! crash-subset-test-decommission timestamp))
