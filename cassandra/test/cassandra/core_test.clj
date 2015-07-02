@@ -17,6 +17,7 @@
 (defn run-set-test!
   "Runs a set test"
   [test ts]
+  (flush) ; Parts of stacktraces were getting buffered on errors
   (let [test (jepsen/run! test)]
     (or (is (:valid? (:results test)))
         (println (:error (:results test))))
@@ -28,6 +29,7 @@
 (defn run-counter-test!
   "Runs a counter test"
   [test ts]
+  (flush) ; Parts of stacktraces were getting buffered on errors
   (let [test (jepsen/run! test)]
     (or (is (:valid? (:results test)))
         (println (:error (:results test))))
@@ -39,6 +41,7 @@
 (defn run-cas-register-test!
   "Runs a cas register test"
   [test ts]
+  (flush) ; Parts of stacktraces were getting buffered on errors
   (let [test (jepsen/run! test)]
     (or (is (:valid? (:results test)))
         (println (:error (:results test))))
