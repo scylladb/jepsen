@@ -186,7 +186,7 @@
   [node test]
   (let [bootstrap (:bootstrap test)
         decommission (:decommission test)]
-    (when-not (or (node @bootstrap) (node @decommission))
+    (when-not (or (node @bootstrap) (->> node name dns-resolve (get decommission)))
       (start! node test))))
 
 (defn stop!
