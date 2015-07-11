@@ -1,0 +1,61 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# All Vagrant configuration is done below. The "2" in Vagrant.configure
+# configures the configuration version (we support older styles for
+# backwards compatibility). Please don't change it unless you know what
+# you're doing.
+ENV['VAGRANT_DEFAULT_PROVIDER'] = 'virtualbox'
+
+$hostsedit = <<EOB
+    echo "10.2.0.2 n1" >> /etc/hosts
+    echo "10.2.0.3 n2" >> /etc/hosts
+    echo "10.2.0.4 n3" >> /etc/hosts
+    echo "10.2.0.5 n4" >> /etc/hosts
+    echo "10.2.0.6 n5" >> /etc/hosts
+EOB
+
+$sshedit = <<EOB
+  sudo sed -i 's/PermitRootLogin.*/PermitRootLogin yes/g' /etc/ssh/sshd_config
+  sudo service sshd restart
+  echo -e "root\nroot" | sudo passwd root
+EOB
+
+Vagrant.configure(2) do |config|
+  config.vm.define "n1" do |n1|    
+    n1.vm.box = "debian/jessie64"
+    n1.vm.network "private_network", ip: "10.2.0.2"
+    n1.vm.hostname = "n1"
+  end
+
+  config.vm.define "n2" do |n2|
+    n2.vm.box = "debian/jessie64"
+    n2.vm.network "private_network", ip: "10.2.0.3"
+    n2.vm.hostname = "n2"
+  end
+
+  config.vm.define "n3" do |n3|
+    n3.vm.box = "debian/jessie64"
+    n3.vm.network "private_network", ip: "10.2.0.4"
+    n3.vm.hostname = "n3"
+  end
+
+  config.vm.define "n4" do |n4|
+    n4.vm.box = "debian/jessie64"
+    n4.vm.network "private_network", ip: "10.2.0.5"
+    n4.vm.hostname = "n4"
+  end
+
+  config.vm.define "n5" do |n5|
+    n5.vm.box = "debian/jessie64"
+    n5.vm.network "private_network", ip: "10.2.0.6"
+    n5.vm.hostname = "n5"
+  end
+
+  config.vm.provision "shell", inline: $hostsedit
+  config.vm.provision "shell", inline: $sshedit
+  config.vm.provider "virtualbox" do |v|
+    v.memory = 2048
+    v.cpus = 1
+  end
+end

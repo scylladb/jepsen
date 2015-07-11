@@ -55,7 +55,7 @@
 (defn dns-resolve
   "Gets the address of a hostname"
   [hostname]
-  (.getHostAddress (InetAddress/getByName hostname)))
+  (.getHostAddress (InetAddress/getByName (name hostname))))
 
 (defn live-nodes
   "Get the list of live nodes from a random node in the cluster"
@@ -150,6 +150,10 @@
    (doseq [rep ["\"s/#MAX_HEAP_SIZE=.*/MAX_HEAP_SIZE='512M'/g\""
                 "\"s/#HEAP_NEWSIZE=.*/HEAP_NEWSIZE='128M'/g\""
                 "\"s/LOCAL_JMX=yes/LOCAL_JMX=no/g\""
+                (str "'s/# JVM_OPTS=\"$JVM_OPTS -Djava.rmi.server.hostname="
+                     "<public name>\"/JVM_OPTS=\"$JVM_OPTS -Djava.rmi.server.hostname="
+                     (name node) "\"/g'"
+                     )
                 (str "'s/JVM_OPTS=\"$JVM_OPTS -Dcom.sun.management.jmxremote"
                      ".authenticate=true\"/JVM_OPTS=\"$JVM_OPTS -Dcom.sun.management"
                      ".jmxremote.authenticate=false\"/g'")]]
@@ -157,9 +161,9 @@
    (doseq [rep ["\"s/cluster_name: .*/cluster_name: 'jepsen'/g\""
                 "\"s/row_cache_size_in_mb: .*/row_cache_size_in_mb: 20/g\""
                 "\"s/seeds: .*/seeds: 'n1,n2'/g\""
-                (str "\"s/listen_address: .*/listen_address: " (net/local-ip)
+                (str "\"s/listen_address: .*/listen_address: " (dns-resolve node)
                      "/g\"")
-                (str "\"s/rpc_address: .*/rpc_address: " (net/local-ip) "/g\"")
+                (str "\"s/rpc_address: .*/rpc_address: " (dns-resolve node) "/g\"")
                 (str "\"s/broadcast_rpc_address: .*/broadcast_rpc_address: "
                      (net/local-ip) "/g\"")
                 "\"s/internode_compression: .*/internode_compression: none/g\""
@@ -308,7 +312,7 @@
   (merge tests/noop-test
          {:name    (str "cassandra " name)
           :os      debian/os
-          :db      (db "2.1.7")
+          :db      (db "2.1.8")
           :bootstrap (atom #{})
           :decommission (atom #{})}
          opts))
