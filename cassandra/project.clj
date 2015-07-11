@@ -14,4 +14,5 @@
                    :lwt :lwt
                    :decommission :decommission
                    :counter :counter
+                   :clock :clock
                    :all (constantly true)})

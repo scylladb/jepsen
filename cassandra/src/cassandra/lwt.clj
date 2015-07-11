@@ -167,6 +167,10 @@
   (cas-register-test "crash"
                      {:conductors {:nemesis crash-nemesis}}))
 
+(def clock-drift-test
+  (cas-register-test "clock drift"
+                     {:conductors {:nemesis (nemesis/clock-scrambler 10000)}}))
+
 (def bridge-test-bootstrap
   (cas-register-test "bridge bootstrap"
                      {:bootstrap (atom #{:n4 :n5})
@@ -191,6 +195,12 @@
                       :conductors {:nemesis crash-nemesis
                                    :bootstrapper (conductors/bootstrapper)}}))
 
+(def clock-drift-test-bootstrap
+  (cas-register-test "clock drift bootstrap"
+                     {:bootstrap (atom #{:n4 :n5})
+                      :conductors {:nemesis (nemesis/clock-scrambler 10000)
+                                   :bootstrapper (conductors/bootstrapper)}}))
+
 (def bridge-test-decommission
   (cas-register-test "bridge decommission"
                      {:conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))
@@ -209,4 +219,9 @@
 (def crash-subset-test-decommission
   (cas-register-test "crash decommission"
                      {:conductors {:nemesis crash-nemesis
+                                   :decommissioner (conductors/decommissioner)}}))
+
+(def clock-drift-test-decommission
+  (cas-register-test "clock drift decommission"
+                     {:conductors {:nemesis (nemesis/clock-scrambler 10000)
                                    :decommissioner (conductors/decommissioner)}}))
