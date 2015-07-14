@@ -33,7 +33,7 @@
                                                 ReadTimeoutException
                                                 NoHostAvailableException)))
 
-(defrecord CQLSetClient [conn]
+(defrecord CQLSetClient [conn writec]
   client/Client
   (setup! [_ test node]
     (locking setup-lock
@@ -52,10 +52,10 @@
         (cql/insert conn "sets"
                     {:id 0
                      :elements #{}})
-        (->CQLSetClient conn))))
+        (->CQLSetClient conn writec))))
   (invoke! [this test op]
     (case (:f op)
-      :add (try (with-consistency-level ConsistencyLevel/ONE
+      :add (try (with-consistency-level writec
                   (cql/update conn
                               "sets"
                               {:elements [+ #{(:value op)}]}
@@ -93,8 +93,8 @@
 
 (defn cql-set-client
   "A set implemented using CQL sets"
-  []
-  (->CQLSetClient nil))
+  ([] (->CQLSetClient nil ConsistencyLevel/ONE))
+  ([writec] (->CQLSetClient nil writec)))
 
 (defn cql-set-test
   [name opts]
@@ -171,5 +171,6 @@
 
 (def crash-subset-test-decommission
   (cql-set-test "crash decommission"
-                {:conductors {:nemesis crash-nemesis
+                {:client (cql-set-client ConsistencyLevel/QUORUM)
+                 :conductors {:nemesis crash-nemesis
                               :decommissioner (conductors/decommissioner)}}))

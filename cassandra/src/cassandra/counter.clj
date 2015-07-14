@@ -33,7 +33,7 @@
                                                 ReadTimeoutException
                                                 NoHostAvailableException)))
 
-(defrecord CQLCounterClient [conn]
+(defrecord CQLCounterClient [conn writec]
   client/Client
   (setup! [_ test node]
     (locking setup-lock
@@ -51,11 +51,11 @@
                                                :primary-key [:id]}))
         (cql/update conn "counters" {:count (increment-by 0)}
                     (where [[= :id 0]]))
-        (->CQLCounterClient conn))))
+        (->CQLCounterClient conn writec))))
   (invoke! [this test op]
     (case (:f op)
       :add (try (do
-                  (with-consistency-level ConsistencyLevel/ONE
+                  (with-consistency-level writec
                     (cql/update conn
                                 "counters"
                                 {:count (increment-by (:value op))}
@@ -90,8 +90,8 @@
 
 (defn cql-counter-client
   "A counter implemented using CQL counters"
-  []
-  (->CQLCounterClient nil))
+  ([] (->CQLCounterClient nil ConsistencyLevel/ONE))
+  ([writec] (->CQLCounterClient nil writec)))
 
 (defn cql-counter-inc-test
   [name opts]
@@ -224,7 +224,8 @@
 
 (def crash-subset-inc-test-decommission
   (cql-counter-inc-test "crash decommission"
-                        {:conductors {:nemesis crash-nemesis
+                        {:client (cql-counter-client ConsistencyLevel/QUORUM)
+                         :conductors {:nemesis crash-nemesis
                                       :decommissioner (conductors/decommissioner)}}))
 
 (def bridge-inc-dec-test-decommission
@@ -245,5 +246,6 @@
 
 (def crash-subset-inc-dec-test-decommission
   (cql-counter-inc-dec-test "crash decommission"
-                            {:conductors {:nemesis crash-nemesis
+                            {:client (cql-counter-client ConsistencyLevel/QUORUM)
+                             :conductors {:nemesis crash-nemesis
                                           :decommissioner (conductors/decommissioner)}}))

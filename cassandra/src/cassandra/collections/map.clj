@@ -33,7 +33,7 @@
                                                 ReadTimeoutException
                                                 NoHostAvailableException)))
 
-(defrecord CQLMapClient [conn]
+(defrecord CQLMapClient [conn writec]
   client/Client
   (setup! [_ test node]
     (locking setup-lock
@@ -52,10 +52,10 @@
         (cql/insert conn "maps"
                     {:id 0
                      :elements {}})
-        (->CQLMapClient conn))))
+        (->CQLMapClient conn writec))))
   (invoke! [this test op]
     (case (:f op)
-      :add (try (with-consistency-level ConsistencyLevel/ONE
+      :add (try (with-consistency-level writec
                   (cql/update conn
                               "maps"
                               {:elements [+ {(:value op) (:value op)}]}
@@ -90,8 +90,8 @@
 
 (defn cql-map-client
   "A set implemented using CQL maps"
-  []
-  (->CQLMapClient nil))
+  ([] (->CQLMapClient nil ConsistencyLevel/ONE))
+  ([writec] (->CQLMapClient nil writec)))
 
 (defn cql-map-test
   [name opts]
@@ -168,5 +168,6 @@
 
 (def crash-subset-test-decommission
   (cql-map-test "crash decommission"
-                {:conductors {:nemesis crash-nemesis
+                {:client (cql-map-client ConsistencyLevel/QUORUM)
+                 :conductors {:nemesis crash-nemesis
                               :decommissioner (conductors/decommissioner)}}))
