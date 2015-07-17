@@ -11,6 +11,7 @@
                    :bootstrap :bootstrap
                    :map :map
                    :set :set
+                   :mv-set :mv-set
                    :lwt :lwt
                    :decommission :decommission
                    :counter :counter

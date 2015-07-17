@@ -33,3 +33,14 @@
               (assoc op :value (str node " decommissioned")))
           (assoc op :value "no nodes eligible for decommission"))))
     (teardown! [this test] this)))
+
+(defn replayer
+  []
+  (reify client/Client
+    (setup! [this test node] this)
+    (invoke! [this test op]
+      (let [live-nodes (cassandra/live-nodes test)]
+        (doseq [node live-nodes]
+          (cassandra/nodetool node "replaybatchlog"))
+        (assoc op :value (str live-nodes " batch logs replayed"))))
+    (teardown! [this test] this)))

@@ -247,19 +247,19 @@
   (gen/phases
    (->> gen
         (gen/nemesis
-         (gen/seq (cycle [(gen/sleep (scaled 20))
+         (gen/seq (cycle [(gen/sleep (scaled 15))
                           {:type :info :f :start}
-                          (gen/sleep (scaled 60))
+                          (gen/sleep (scaled 45))
                           {:type :info :f :stop}])))
         (bootstrap 120)
         (gen/conductor :decommissioner
-                       (gen/seq (cycle [(gen/sleep (scaled 150))
+                       (gen/seq (cycle [(gen/sleep (scaled 100))
                                         {:type :info :f :decommission}])))
-        (gen/time-limit (scaled 600)))
+        (gen/time-limit (scaled 400)))
    (recover)
    (gen/clients
     (->> gen
-         (gen/time-limit (scaled 60))))))
+         (gen/time-limit (scaled 40))))))
 
 (def add {:type :invoke :f :add :value 1})
 (def sub {:type :invoke :f :add :value -1})

@@ -247,18 +247,17 @@
 (defn conductor
   "Combines a generator of normal operations and a generator for a conductor.
   The name of the conductor is given."
-  [conductor conductor-gen src-gen]
-  (concat (on #{conductor} conductor-gen)
-          (on (complement #{conductor}) src-gen)))
+  ([conductor conductor-gen]
+   (on #{conductor} conductor-gen))
+  ([conductor conductor-gen src-gen]
+   (concat (on #{conductor} conductor-gen)
+           (on (complement #{conductor}) src-gen))))
 
-(defn nemesis
+(def nemesis
   "Combines a generator of normal operations and a generator for nemesis
   operations into one. When the process requesting an operation is :nemesis,
   routes to the nemesis generator; otherwise to the normal generator."
-  ([nemesis-gen]
-   (on #{:nemesis} nemesis-gen))
-  ([nemesis-gen client-gen]
-   (conductor :nemesis nemesis-gen client-gen)))
+  (partial conductor :nemesis))
 
 (defn clients
   "Executes generator only on clients."
