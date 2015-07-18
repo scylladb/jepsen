@@ -1,9 +1,11 @@
 (ns cassandra.conductors
-  (:require [clojure.tools.logging :refer :all]
+  (:require [cassandra.core :as cassandra]
+            [clojure.set :as set]
+            [clojure.set :as :set]
+            [clojure.tools.logging :refer :all]
             [jepsen [client :as client]
              [control :as c]
-             [util :as util :refer [meh]]]
-            [cassandra.core :as cassandra]))
+             [util :as util :refer [meh]]]))
 
 (defn bootstrapper
   []
@@ -25,7 +27,8 @@
     (setup! [this test node] this)
     (invoke! [this test op]
       (let [decommission (:decommission test)]
-        (if-let [node (some-> test cassandra/live-nodes shuffle (get 3))] ; keep at least RF nodes
+        (if-let [node (some-> test cassandra/live-nodes (set/difference @decommission)
+                              shuffle (get 3))] ; keep at least RF nodes
           (do (info node "decommissioning")
               (info @decommission "already decommissioned")
               (swap! decommission conj node)
