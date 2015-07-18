@@ -60,15 +60,15 @@
 (defn live-nodes
   "Get the list of live nodes from a random node in the cluster"
   [test]
-  (some (fn [node]          
-          (try (jmx/with-connection {:host (name node) :port 7199}
-                 (jmx/read "org.apache.cassandra.db:type=StorageService"
-                           :LiveNodes))
-               (catch Exception e
-                 (info "Couldn't get status from node" node))))
-        (-> test :nodes set (set/difference @(:bootstrap test))
-            (#(map (comp dns-resolve name) %)) set (set/difference @(:decommission test))
-            shuffle)))
+  (set (some (fn [node]          
+               (try (jmx/with-connection {:host (name node) :port 7199}
+                      (jmx/read "org.apache.cassandra.db:type=StorageService"
+                                :LiveNodes))
+                    (catch Exception e
+                      (info "Couldn't get status from node" node))))
+             (-> test :nodes set (set/difference @(:bootstrap test))
+                 (#(map (comp dns-resolve name) %)) set (set/difference @(:decommission test))
+                 shuffle))))
 
 (defn nodetool
   "Run a nodetool command"
