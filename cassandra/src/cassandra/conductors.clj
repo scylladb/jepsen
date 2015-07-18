@@ -1,7 +1,6 @@
 (ns cassandra.conductors
   (:require [cassandra.core :as cassandra]
             [clojure.set :as set]
-            [clojure.set :as :set]
             [clojure.tools.logging :refer :all]
             [jepsen [client :as client]
              [control :as c]
