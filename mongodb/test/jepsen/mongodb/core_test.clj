@@ -1,10 +1,10 @@
-(ns mongodb.core-test
+(ns jepsen.mongodb.core-test
   (:require [clojure.test :refer :all]
             [clojure.pprint :refer :all]
             [clojure.java.io :as io]
-            [mongodb [core :as m]
-                     [document-cas :as dc]
-                     [transfer :as t]]
+            [jepsen.mongodb [core :as m]
+                            [document-cas :as dc]
+                            [transfer :as t]]
             [jepsen [core      :as jepsen]
                     [util      :as util]
                     [checker   :as checker]
@@ -18,11 +18,7 @@
 (defn run!
   [test]
   (let [test (jepsen/run! test)]
-    (is (:valid? (:results test)))
-    (report/to "report/history.edn"
-               (pprint (:history test)))
-    (report/to "report/linearizability.txt"
-               (-> test :results :linear report/linearizability))))
+    (is (:valid? (:results test)))))
 
 (deftest document-cas-majority-test         (run! (dc/majority-test)))
 ;(deftest document-cas-no-read-majority-test (run! (dc/no-read-majority-test)))

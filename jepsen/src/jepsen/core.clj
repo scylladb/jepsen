@@ -14,6 +14,8 @@
   system by using an *OS* and *client* respectively. See `run!` for details."
   (:use     clojure.tools.logging)
   (:require [clojure.stacktrace :as trace]
+            [clojure.string :as str]
+            [clojure.pprint :refer [pprint]]
             [knossos.core :as knossos]
             [jepsen.util :as util :refer [with-thread-name
                                           relative-time-nanos]]
@@ -33,9 +35,10 @@
   (.await ^CyclicBarrier (:barrier test)))
 
 (defn conj-op!
-  "Add an operation to a tests's history."
+  "Add an operation to a tests's history, and returns the operation."
   [test op]
-  (swap! (:history test) conj op))
+  (swap! (:history test) conj op)
+  op)
 
 (defn primary
   "Given a test, returns the primary node."
@@ -229,8 +232,37 @@
        (finally
          (client/teardown! nemesis# ~test)))))
 
+(defn snarf-logs!
+  "Downloads logs for a test."
+  [test]
+  ; Download logs
+  (when (satisfies? db/LogFiles (:db test))
+    (info "Snarfing log files")
+    (on-nodes test
+              (fn [test node]
+                (let [full-paths (db/log-files (:db test) test node)
+                      ; A map of full paths to short paths
+                      paths      (->> full-paths
+                                      (map #(str/split % #"/"))
+                                      util/drop-common-proper-prefix
+                                      (map (partial str/join "/"))
+                                      (zipmap full-paths))]
+                  (doseq [[remote local] paths]
+                    (info "downloading" remote "to" local)
+                    (control/download
+                      remote
+                      (.getCanonicalPath
+                        (store/path! test (name node)
+                                     ; strip leading /
+                                     (str/replace local #"^/" "")))
+                      ; broken
+                      ; :recursive true
+                      ; :preserve true
+                      )))))))
+
 (defn run-case!
-  "Spawns clients, runs a single test case, and returns that case's history."
+  "Spawns clients, runs a single test case, snarf the logs, and returns that
+  case's history."
   [test]
   (let [history (atom [])
         test    (assoc test :history history)]
@@ -252,10 +284,25 @@
         ; Wait for workers to complete
         (dorun (map deref workers))
 
+        ; Download logs
+        (snarf-logs! test)
+
         ; Unregister our history
         (swap! (:active-histories test) disj history)
 
         @history))))
+
+(defn log-results
+  "Logs info about the results of a test to stdout, and returns test."
+  [test]
+  (info (str
+          (if (:valid? (:results test))
+            "Everything looks good! ヽ(‘ー`)ノ"
+            "Analysis invalid! (ﾉಥ益ಥ）ﾉ ┻━┻")
+          "\n\n"
+          (with-out-str
+            (pprint (:results test)))))
+  test)
 
 (defn run!
   "Runs a test. Tests are maps containing
@@ -274,6 +321,8 @@
   :generator  A generator of operations to apply to the DB
   :model      The model used to verify the history is correct
   :checker    Verifies that the history is valid
+  :log-files  A list of paths to logfiles/dirs which should be captured at
+              the end of the test.
 
   Tests proceed like so:
 
@@ -293,63 +342,66 @@
     - The client executes the operation and returns a vector of history elements
       - which are appended to the operation history
 
-  6. Teardown the database
+  6. Capture log files
 
-  7. Teardown the operating system
+  7. Teardown the database
 
-  8. When the generator is finished, invoke the checker with the model and
+  8. Teardown the operating system
+
+  9. When the generator is finished, invoke the checker with the model and
      the history
     - This generates the final report"
   [test]
-  (with-thread-name "jepsen test runner"
-    (let [test (assoc test
-                      ; Initialization time
-                      :start-time (util/local-time)
+  (log-results
+    (with-thread-name "jepsen test runner"
+      (let [test (assoc test
+                        ; Initialization time
+                        :start-time (util/local-time)
 
-                      ; Synchronization point for nodes
-                      :barrier (CyclicBarrier. (count (:nodes test)))
-                      ; Currently running histories
-                      :active-histories (atom #{}))]
+                        ; Synchronization point for nodes
+                        :barrier (CyclicBarrier. (count (:nodes test)))
+                        ; Currently running histories
+                        :active-histories (atom #{}))]
 
-      ; Open SSH conns
-      (control/with-ssh (:ssh test)
-        (with-resources [sessions control/session control/disconnect
-                         (:nodes test)]
+        ; Open SSH conns
+        (control/with-ssh (:ssh test)
+          (with-resources [sessions
+                           (bound-fn* control/session)
+                           control/disconnect
+                           (:nodes test)]
 
-          ; Index sessions by node name and add to test
-          (let [test (->> sessions
-                          (map vector (:nodes test))
-                          (into {})
-                          (assoc test :sessions))]
+            ; Index sessions by node name and add to test
+            (let [test (->> sessions
+                            (map vector (:nodes test))
+                            (into {})
+                            (assoc test :sessions))]
 
-            ; Setup
-            (with-os test
-              (with-db test
-                (binding [generator/*threads*
-                          (cons :nemesis (range (count (:nodes test))))]
-                  (util/with-relative-time
-                    (with-nemesis test
+              ; Setup
+              (with-os test
+                (with-db test
+                  (binding [generator/*threads*
+                            (cons :nemesis (range (count (:nodes test))))]
+                    (util/with-relative-time
+                      (with-nemesis test
 
-                      ; Run a single case
-                      (let [test (assoc test :history (run-case! test))
-                            ; Remove state
-                            test (dissoc test
-                                         :barrier
-                                         :active-histories
-                                         :sessions)]
+                        ; Run a single case
+                        (let [test (assoc test :history (run-case! test))
+                              ; Remove state
+                              test (dissoc test
+                                           :barrier
+                                           :active-histories
+                                           :sessions)]
 
-                        (info "Run complete, writing")
-
-                        (when (:name test) (store/save! test))
-
-                        (info "Analyzing")
-                        (let [test (assoc test :results (checker/check-safe
-                                                          (:checker test)
-                                                          test
-                                                          (:model test)
-                                                          (:history test)))]
-
-                          (info "Analysis complete")
+                          (info "Run complete, writing")
                           (when (:name test) (store/save! test))
 
-                          test)))))))))))))
+                          (info "Analyzing")
+                          (let [test (assoc test :results (checker/check-safe
+                                                            (:checker test)
+                                                            test
+                                                            (:model test)
+                                                            (:history test)))]
+
+                            (info "Analysis complete")
+                            (when (:name test) (store/save! test))
+                          test))))))))))))))

@@ -43,9 +43,10 @@
     (println (op->str op))))
 
 (defn log-op
-  "Logs an operation."
+  "Logs an operation and returns it."
   [op]
-  (info (op->str op)))
+  (info (op->str op))
+  op)
 
 (def logger (agent nil))
 (defn log-print
@@ -295,3 +296,27 @@
                                         [pairs starts]))
                                     [[] (clojure.lang.PersistentQueue/EMPTY)]))]
     (concat pairs (map vector starts (repeat nil)))))
+
+(defn longest-common-prefix
+  "Given a collection of sequences, finds the longest sequence which is a
+  prefix of every sequence given."
+  [cs]
+  (when (seq cs)
+    (reduce (fn prefix [s1 s2]
+              (let [len (->> (map = s1 s2)
+                             (take-while true?)
+                             count)]
+                ; Avoid unnecessary seq wrapping
+                (if (= len (count s1))
+                  s1
+                  (take len s2))))
+            cs)))
+
+(defn drop-common-proper-prefix
+  "Given a collection of sequences, removes the longest common proper prefix
+  from each one."
+  [cs]
+  (map (partial drop (reduce min
+                             (count (longest-common-prefix cs))
+                             (map (comp dec count) cs)))
+       cs))
