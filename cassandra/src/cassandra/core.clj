@@ -305,7 +305,7 @@
   (nemesis/node-start-stopper
    mostly-small-nonempty-subset
    (fn start [test node] (meh (c/su (c/exec :killall :-9 :java))) [:killed node])
-   (fn stop  [test node] (guarded-start! node test) [:restarted node])))
+   (fn stop  [test node] (meh (guarded-start! node test)) [:restarted node])))
 
 (defn cassandra-test
   [name opts]
