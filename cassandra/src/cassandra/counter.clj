@@ -104,10 +104,7 @@
                                           (gen/delay 1/10)
                                           std-gen)
                           :checker (checker/compose
-                                    {:timeline timeline/html
-                                     :counter checker/counter
-                                     :latency (checker/latency-graph
-                                               "report")})})
+                                    {:counter checker/counter})})
          opts))
 
 (defn cql-counter-inc-dec-test
@@ -121,10 +118,7 @@
                                           (gen/delay 1/10)
                                           std-gen)
                           :checker (checker/compose
-                                    {:timeline timeline/html
-                                     :counter checker/counter
-                                     :latency (checker/latency-graph
-                                               "report")})})
+                                    {:counter checker/counter})})
          opts))
 
 (def bridge-inc-test

@@ -108,10 +108,7 @@
                                            std-gen)
                                       (read-once))
                           :checker (checker/compose
-                                    {:timeline timeline/html
-                                     :set checker/set
-                                     :latency (checker/latency-graph
-                                               "report")})})
+                                    {:set checker/set})})
          opts))
 
 (def bridge-test
