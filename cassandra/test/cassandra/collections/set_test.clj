@@ -7,37 +7,37 @@
              [report :as report]]))
 
 (deftest ^:set ^:steady cql-set-bridge
-  (run-set-test! bridge-test timestamp))
+  (run-test! bridge-test))
 
 (deftest ^:set ^:steady cql-set-isolate-node
-  (run-set-test! isolate-node-test timestamp))
+  (run-test! isolate-node-test))
 
 (deftest ^:set ^:steady cql-set-halves
-  (run-set-test! halves-test timestamp))
+  (run-test! halves-test))
 
 (deftest ^:set ^:steady cql-set-crash-subset
-  (run-set-test! crash-subset-test timestamp))
+  (run-test! crash-subset-test))
 
 (deftest ^:set ^:bootstrap cql-set-bridge-bootstrap
-  (run-set-test! bridge-test-bootstrap timestamp))
+  (run-test! bridge-test-bootstrap))
 
 (deftest ^:set ^:bootstrap cql-set-isolate-node-bootstrap
-  (run-set-test! isolate-node-test-bootstrap timestamp))
+  (run-test! isolate-node-test-bootstrap))
 
 (deftest ^:set ^:bootstrap cql-set-halves-bootstrap
-  (run-set-test! halves-test-bootstrap timestamp))
+  (run-test! halves-test-bootstrap))
 
 (deftest ^:set ^:bootstrap cql-set-crash-subset-bootstrap
-  (run-set-test! crash-subset-test-bootstrap timestamp))
+  (run-test! crash-subset-test-bootstrap))
 
 (deftest ^:set ^:decommission cql-set-bridge-decommission
-  (run-set-test! bridge-test-decommission timestamp))
+  (run-test! bridge-test-decommission))
 
 (deftest ^:set ^:decommission cql-set-isolate-node-decommission
-  (run-set-test! isolate-node-test-decommission timestamp))
+  (run-test! isolate-node-test-decommission))
 
 (deftest ^:set ^:decommission cql-set-halves-decommission
-  (run-set-test! halves-test-decommission timestamp))
+  (run-test! halves-test-decommission))
 
 (deftest ^:set ^:decommission cql-set-crash-subset-decommission
-  (run-set-test! crash-subset-test-decommission timestamp))
+  (run-test! crash-subset-test-decommission))

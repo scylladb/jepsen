@@ -8,48 +8,48 @@
 
 ;; Steady state cluster tests
 (deftest ^:batch-set ^:steady batch-set-bridge
-  (run-set-test! bridge-test timestamp))
+  (run-test! bridge-test))
 
 (deftest ^:batch-set ^:steady batch-set-isolate-node
-  (run-set-test! isolate-node-test timestamp))
+  (run-test! isolate-node-test))
 
 (deftest ^:batch-set ^:steady batch-set-halves
-  (run-set-test! halves-test timestamp))
+  (run-test! halves-test))
 
 (deftest ^:batch-set ^:steady batch-set-crash-subset
-  (run-set-test! crash-subset-test timestamp))
+  (run-test! crash-subset-test))
 
 (deftest ^:clock batch-set-clock-drift
-  (run-set-test! clock-drift-test timestamp))
+  (run-test! clock-drift-test))
 
 ;; Bootstrapping tests
 (deftest ^:batch-set ^:bootstrap batch-set-bridge-bootstrap
-  (run-set-test! bridge-test-bootstrap timestamp))
+  (run-test! bridge-test-bootstrap))
 
 (deftest ^:batch-set ^:bootstrap batch-set-isolate-node-bootstrap
-  (run-set-test! isolate-node-test-bootstrap timestamp))
+  (run-test! isolate-node-test-bootstrap))
 
 (deftest ^:batch-set ^:bootstrap batch-set-halves-bootstrap
-  (run-set-test! halves-test-bootstrap timestamp))
+  (run-test! halves-test-bootstrap))
 
 (deftest ^:batch-set ^:bootstrap batch-set-crash-subset-bootstrap
-  (run-set-test! crash-subset-test-bootstrap timestamp))
+  (run-test! crash-subset-test-bootstrap))
 
 (deftest ^:clock batch-set-clock-drift-bootstrap
-  (run-set-test! clock-drift-test-bootstrap timestamp))
+  (run-test! clock-drift-test-bootstrap))
 
 ;; Decommission tests
 (deftest ^:batch-set ^:decommission batch-set-bridge-decommission
-  (run-set-test! bridge-test-decommission timestamp))
+  (run-test! bridge-test-decommission))
 
 (deftest ^:batch-set ^:decommission batch-set-isolate-node-decommission
-  (run-set-test! isolate-node-test-decommission timestamp))
+  (run-test! isolate-node-test-decommission))
 
 (deftest ^:batch-set ^:decommission batch-set-halves-decommission
-  (run-set-test! halves-test-decommission timestamp))
+  (run-test! halves-test-decommission))
 
 (deftest ^:batch-set ^:decommission batch-set-crash-subset-decommission
-  (run-set-test! crash-subset-test-decommission timestamp))
+  (run-test! crash-subset-test-decommission))
 
 (deftest ^:clock batch-set-clock-drift-decommission
-  (run-set-test! clock-drift-test-decommission timestamp))
+  (run-test! clock-drift-test-decommission))

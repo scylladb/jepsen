@@ -8,48 +8,48 @@
 
 ;; Steady state cluster tests
 (deftest ^:lwt ^:steady lwt-bridge
-  (run-cas-register-test! bridge-test timestamp))
+  (run-test! bridge-test))
 
 (deftest ^:lwt ^:steady lwt-isolate-node
-  (run-cas-register-test! isolate-node-test timestamp))
+  (run-test! isolate-node-test))
 
 (deftest ^:lwt ^:steady lwt-halves
-  (run-cas-register-test! halves-test timestamp))
+  (run-test! halves-test))
 
 (deftest ^:lwt ^:steady lwt-crash-subset
-  (run-cas-register-test! crash-subset-test timestamp))
+  (run-test! crash-subset-test))
 
 (deftest ^:clock lwt-clock-drift
-  (run-cas-register-test! clock-drift-test timestamp))
+  (run-test! clock-drift-test))
 
 ;; Bootstrapping tests
 (deftest ^:lwt ^:bootstrap lwt-bridge-bootstrap
-  (run-cas-register-test! bridge-test-bootstrap timestamp))
+  (run-test! bridge-test-bootstrap))
 
 (deftest ^:lwt ^:bootstrap lwt-isolate-node-bootstrap
-  (run-cas-register-test! isolate-node-test-bootstrap timestamp))
+  (run-test! isolate-node-test-bootstrap))
 
 (deftest ^:lwt ^:bootstrap lwt-halves-bootstrap
-  (run-cas-register-test! halves-test-bootstrap timestamp))
+  (run-test! halves-test-bootstrap))
 
 (deftest ^:lwt ^:bootstrap lwt-crash-subset-bootstrap
-  (run-cas-register-test! crash-subset-test-bootstrap timestamp))
+  (run-test! crash-subset-test-bootstrap))
 
 (deftest ^:clock lwt-clock-drift-bootstrap
-  (run-cas-register-test! clock-drift-test-bootstrap timestamp))
+  (run-test! clock-drift-test-bootstrap))
 
 ;; Decommission tests
 (deftest ^:lwt ^:decommission lwt-bridge-decommission
-  (run-cas-register-test! bridge-test-decommission timestamp))
+  (run-test! bridge-test-decommission))
 
 (deftest ^:lwt ^:decommission lwt-isolate-node-decommission
-  (run-cas-register-test! isolate-node-test-decommission timestamp))
+  (run-test! isolate-node-test-decommission))
 
 (deftest ^:lwt ^:decommission lwt-halves-decommission
-  (run-cas-register-test! halves-test-decommission timestamp))
+  (run-test! halves-test-decommission))
 
 (deftest ^:lwt ^:decommission lwt-crash-subset-decommission
-  (run-cas-register-test! crash-subset-test-decommission timestamp))
+  (run-test! crash-subset-test-decommission))
 
 (deftest ^:clock lwt-clock-drift-decommission
-  (run-cas-register-test! clock-drift-test-decommission timestamp))
+  (run-test! clock-drift-test-decommission))

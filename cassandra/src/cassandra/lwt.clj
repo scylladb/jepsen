@@ -165,7 +165,7 @@
 
 (def crash-subset-test
   (cas-register-test "crash"
-                     {:conductors {:nemesis crash-nemesis}}))
+                     {:conductors {:nemesis (crash-nemesis)}}))
 
 (def clock-drift-test
   (cas-register-test "clock drift"
@@ -192,7 +192,7 @@
 (def crash-subset-test-bootstrap
   (cas-register-test "crash bootstrap"
                      {:bootstrap (atom #{:n4 :n5})
-                      :conductors {:nemesis crash-nemesis
+                      :conductors {:nemesis (crash-nemesis)
                                    :bootstrapper (conductors/bootstrapper)}}))
 
 (def clock-drift-test-bootstrap
@@ -218,7 +218,7 @@
 
 (def crash-subset-test-decommission
   (cas-register-test "crash decommission"
-                     {:conductors {:nemesis crash-nemesis
+                     {:conductors {:nemesis (crash-nemesis)
                                    :decommissioner (conductors/decommissioner)}}))
 
 (def clock-drift-test-decommission
