@@ -141,7 +141,7 @@
 
 (def crash-subset-inc-test
   (cql-counter-inc-test "crash"
-                        {:conductors {:nemesis crash-nemesis}}))
+                        {:conductors {:nemesis (crash-nemesis)}}))
 
 (def bridge-inc-dec-test
   (cql-counter-inc-dec-test "bridge"
@@ -157,7 +157,7 @@
 
 (def crash-subset-inc-dec-test
   (cql-counter-inc-dec-test "crash"
-                            {:conductors {:nemesis crash-nemesis}}))
+                            {:conductors {:nemesis (crash-nemesis)}}))
 
 (def bridge-inc-test-bootstrap
   (cql-counter-inc-test "bridge bootstrap"
@@ -180,7 +180,7 @@
 (def crash-subset-inc-test-bootstrap
   (cql-counter-inc-test "crash bootstrap"
                         {:bootstrap (atom #{:n4 :n5})
-                         :conductors {:nemesis crash-nemesis
+                         :conductors {:nemesis (crash-nemesis)
                                       :bootstrapper (conductors/bootstrapper)}}))
 
 (def bridge-inc-dec-test-bootstrap
@@ -204,7 +204,7 @@
 (def crash-subset-inc-dec-test-bootstrap
   (cql-counter-inc-dec-test "crash bootstrap"
                             {:bootstrap (atom #{:n4 :n5})
-                             :conductors {:nemesis crash-nemesis
+                             :conductors {:nemesis (crash-nemesis)
                                           :bootstrapper (conductors/bootstrapper)}}))
 
 (def bridge-inc-test-decommission
@@ -225,7 +225,7 @@
 (def crash-subset-inc-test-decommission
   (cql-counter-inc-test "crash decommission"
                         {:client (cql-counter-client ConsistencyLevel/QUORUM)
-                         :conductors {:nemesis crash-nemesis
+                         :conductors {:nemesis (crash-nemesis)
                                       :decommissioner (conductors/decommissioner)}}))
 
 (def bridge-inc-dec-test-decommission
@@ -247,5 +247,5 @@
 (def crash-subset-inc-dec-test-decommission
   (cql-counter-inc-dec-test "crash decommission"
                             {:client (cql-counter-client ConsistencyLevel/QUORUM)
-                             :conductors {:nemesis crash-nemesis
+                             :conductors {:nemesis (crash-nemesis)
                                           :decommissioner (conductors/decommissioner)}}))

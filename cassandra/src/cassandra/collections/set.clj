@@ -128,7 +128,7 @@
 
 (def crash-subset-test
   (cql-set-test "crash"
-                {:conductors {:nemesis crash-nemesis}}))
+                {:conductors {:nemesis (crash-nemesis)}}))
 
 (def bridge-test-bootstrap
   (cql-set-test "bridge bootstrap"
@@ -151,7 +151,7 @@
 (def crash-subset-test-bootstrap
   (cql-set-test "crash bootstrap"
                 {:bootstrap (atom #{:n4 :n5})
-                 :conductors {:nemesis crash-nemesis
+                 :conductors {:nemesis (crash-nemesis)
                               :bootstrapper (conductors/bootstrapper)}}))
 
 (def bridge-test-decommission
@@ -172,5 +172,5 @@
 (def crash-subset-test-decommission
   (cql-set-test "crash decommission"
                 {:client (cql-set-client ConsistencyLevel/QUORUM)
-                 :conductors {:nemesis crash-nemesis
+                 :conductors {:nemesis (crash-nemesis)
                               :decommissioner (conductors/decommissioner)}}))

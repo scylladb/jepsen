@@ -136,7 +136,7 @@
 
 (def crash-subset-test
   (batch-set-test "crash"
-                  {:conductors {:nemesis crash-nemesis}}))
+                  {:conductors {:nemesis (crash-nemesis)}}))
 
 (def clock-drift-test
   (batch-set-test "clock drift"
@@ -163,7 +163,7 @@
 (def crash-subset-test-bootstrap
   (batch-set-test "crash bootstrap"
                   {:bootstrap (atom #{:n4 :n5})
-                   :conductors {:nemesis crash-nemesis
+                   :conductors {:nemesis (crash-nemesis)
                                 :bootstrapper (conductors/bootstrapper)}}))
 
 (def clock-drift-test-bootstrap
@@ -189,7 +189,7 @@
 
 (def crash-subset-test-decommission
   (batch-set-test "crash decommission"
-                  {:conductors {:nemesis crash-nemesis
+                  {:conductors {:nemesis (crash-nemesis)
                                 :decommissioner (conductors/decommissioner)}}))
 
 (def clock-drift-test-decommission

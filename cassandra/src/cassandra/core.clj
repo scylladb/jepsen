@@ -300,8 +300,9 @@
       long
       (take (shuffle xs))))
 
-(def crash-nemesis
+(defn crash-nemesis
   "A nemesis that crashes a random subset of nodes."
+  []
   (nemesis/node-start-stopper
    mostly-small-nonempty-subset
    (fn start [test node] (meh (c/su (c/exec :killall :-9 :java))) [:killed node])
