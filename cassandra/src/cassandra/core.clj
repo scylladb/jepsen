@@ -118,7 +118,7 @@
       (if (cached-install? url)
         (info "Used cached install on node" node)
         (do (if tpath
-              (c/scp* tpath "/tmp/cassandra.tar.gz")
+              (c/upload tpath "/tmp/cassandra.tar.gz")
               (c/exec :wget :-O "cassandra.tar.gz" url (lit ";")))
             (c/exec :tar :xzvf "cassandra.tar.gz" :-C "~")
             (c/exec :rm :-r :-f (lit "~/cassandra"))
@@ -206,6 +206,7 @@
   (stop! node)
   (info node "deleting data files")
   (c/su
+   (meh (c/exec :rm :-r "~/cassandra/logs/system.log"))
    (meh (c/exec :rm :-r "~/cassandra/data/data"))
    (meh (c/exec :rm :-r "~/cassandra/data/commitlog"))
    (meh (c/exec :rm :-r "~/cassandra/data/saved_caches"))))
@@ -221,7 +222,11 @@
         (guarded-start! test)))
 
     (teardown! [_ test node]
-      (wipe! node))))
+      (wipe! node))
+
+    db/LogFiles
+    (log-files [db test node]
+      ["~/cassandra/logs/system.log"])))
 
 (defn recover
   "A generator which stops the nemesis and allows some time for recovery."
