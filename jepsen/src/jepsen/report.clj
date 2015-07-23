@@ -2,7 +2,7 @@
   "Prints out stuff."
   (:require [jepsen.util :as util]
             [clojure.java.io :as io]
-            [clojure.pprint :refer [pprint]]))
+            [fipp.edn :refer [pprint]]))
 
 (defmacro to
   "Binds stdout to a file for the duration of body."

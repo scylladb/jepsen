@@ -2,7 +2,6 @@
   "Persistent storage for test runs and later analysis."
   (:refer-clojure :exclude [load])
   (:require [clojure.data.fressian :as fress]
-            [clojure.pprint :refer [pprint]]
             [clojure.java.io :as io]
             [clojure.tools.logging :refer :all]
             [clj-time.core :as time]
@@ -10,7 +9,8 @@
             [clj-time.coerce :as time.coerce]
             [clj-time.format :as time.format]
             [multiset.core :as multiset]
-            [jepsen.util :as util])
+            [jepsen.util :as util]
+            [fipp.edn :refer [pprint]])
   (:import (java.io File)
            (java.nio.file Files
                           FileSystems

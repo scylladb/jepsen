@@ -1,6 +1,6 @@
 (defproject jepsen "0.0.4"
   :description "Call Me Maybe: Network Partitions in Practice"
-  :dependencies [[org.clojure/clojure "1.6.0"]
+  :dependencies [[org.clojure/clojure "1.7.0"]
                  [org.clojure/data.fressian "0.2.0"]
 ;                            :exclusions [org.fressian/fressian]]
                  [org.clojure/tools.logging "0.2.6"]
@@ -16,7 +16,8 @@
                  [com.netflix.curator/curator-framework "1.3.3"
                   :exclusions [org.slf4j/slf4j-api
                                org.slf4j-log4j12
-                               com.google.guava/guava]]]
+                               com.google.guava/guava]]
+                 [fipp "0.6.2"]]
   :classifiers [["rabbitmq" :rabbitmq]]
   :profiles {:consul {:source-paths ["consul/src"]
                       :test-paths   ["consul/test"]
