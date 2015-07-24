@@ -52,7 +52,9 @@
                                                :mvid :int
                                                :primary-key [:id]}))
         (try (cassandra/execute conn (str "CREATE MATERIALIZED VIEW mv AS SELECT"
-                                          " * FROM original PRIMARY KEY (mvid);"))
+                                          " * FROM original WHERE mvid IS NOT NULL"
+                                          " AND id IS NOT NULL "
+                                          "PRIMARY KEY (mvid, id);"))
              (catch com.datastax.driver.core.exceptions.AlreadyExistsException e))
         (->MVSetClient conn))))
   (invoke! [this test op]
