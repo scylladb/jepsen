@@ -118,6 +118,52 @@
            :lost-frac       (util/fraction (count lost) (count attempts))
            :recovered-frac  (util/fraction (count recovered) (count attempts))})))))
 
+(def associative-map
+  "Given a set of :assoc operations interspersed with :read's, verifies that
+  the newest assoc'ed value for each key is present in each read, and that :read's
+  contain only key-value pairs for which an assoc was attempted. The map should have stabilized
+  before a :read is issued, such that all :invoke's have been :ok'ed, :info'ed or :fail'ed. In that way,
+  map is more like a multi-phase set model than the counter model."
+  (reify Checker
+    (check [this test model history]
+      (loop [history (seq (history/complete history))
+             reads []
+             possible {}
+             confirmed {}]
+        (if (nil? history)
+          (let [errors (remove (fn [{:keys [confirmed possible actual]}]
+                                 (and (every? (fn [[k v]]
+                                                (or (= v (get confirmed k))
+                                                    (some #{v} (get possible k)))) actual)
+                                      (every? (clojure.core/set (keys actual)) (keys confirmed))))
+                               reads)]
+            {:valid? (empty? errors)
+             :reads reads
+             :errors errors})
+          (let [op (first history)
+                history (next history)]
+            (case [(:type op) (:f op)]
+              [:ok :read]
+              (recur history (conj reads {:confirmed confirmed
+                                          :possible possible
+                                          :actual (:value op)}) possible confirmed)
+
+              [:invoke :assoc]
+              (recur history reads (update-in possible [(:k (:value op))]
+                                              conj (:v (:value op))) confirmed)
+
+              [:fail :assoc]
+              (recur history reads (update-in possible [(:k (:value op))]
+                                              (partial remove (partial = (:v (:value op)))))
+                     confirmed)
+
+              [:ok :assoc]
+              (recur history reads (update-in possible [(:k (:value op))]
+                                              (partial remove (partial = (:v (:value op)))))
+                     (assoc confirmed (:k (:value op)) (:v (:value op))))
+
+              (recur history reads possible confirmed))))))))
+
 (defn fraction
   "a/b, but if b is zero, returns unity."
   [a b]
@@ -194,8 +240,6 @@
   {:valid?              Whether the counter remained within bounds
    :reads               [[lower-bound read-value upper-bound] ...]
    :errors              [[lower-bound read-value upper-bound] ...]
-   :max-absolute-error  The [lower read upper] where read falls furthest outside
-   :max-relative-error  Same, but with error computed as a fraction of the mean}
   "
   (reify Checker
     (check [this test model history]

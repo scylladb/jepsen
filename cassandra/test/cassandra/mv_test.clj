@@ -7,49 +7,49 @@
              [report :as report]]))
 
 ;; Steady state cluster tests
-(deftest ^:mv-set ^:steady mv-set-bridge
+(deftest ^:mv ^:steady mv-bridge
   (run-test! bridge-test))
 
-(deftest ^:mv-set ^:steady mv-set-isolate-node
+(deftest ^:mv ^:steady mv-isolate-node
   (run-test! isolate-node-test))
 
-(deftest ^:mv-set ^:steady mv-set-halves
+(deftest ^:mv ^:steady mv-halves
   (run-test! halves-test))
 
-(deftest ^:mv-set ^:steady mv-set-crash-subset
+(deftest ^:mv ^:steady mv-crash-subset
   (run-test! crash-subset-test))
 
-(deftest ^:clock mv-set-clock-drift
+(deftest ^:clock mv-clock-drift
   (run-test! clock-drift-test))
 
 ;; Bootstrapping tests
-(deftest ^:mv-set ^:bootstrap mv-set-bridge-bootstrap
+(deftest ^:mv ^:bootstrap mv-bridge-bootstrap
   (run-test! bridge-test-bootstrap))
 
-(deftest ^:mv-set ^:bootstrap mv-set-isolate-node-bootstrap
+(deftest ^:mv ^:bootstrap mv-isolate-node-bootstrap
   (run-test! isolate-node-test-bootstrap))
 
-(deftest ^:mv-set ^:bootstrap mv-set-halves-bootstrap
+(deftest ^:mv ^:bootstrap mv-halves-bootstrap
   (run-test! halves-test-bootstrap))
 
-(deftest ^:mv-set ^:bootstrap mv-set-crash-subset-bootstrap
+(deftest ^:mv ^:bootstrap mv-crash-subset-bootstrap
   (run-test! crash-subset-test-bootstrap))
 
-(deftest ^:clock mv-set-clock-drift-bootstrap
+(deftest ^:clock mv-clock-drift-bootstrap
   (run-test! clock-drift-test-bootstrap))
 
 ;; Decommission tests
-(deftest ^:mv-set ^:decommission mv-set-bridge-decommission
+(deftest ^:mv ^:decommission mv-bridge-decommission
   (run-test! bridge-test-decommission))
 
-(deftest ^:mv-set ^:decommission mv-set-isolate-node-decommission
+(deftest ^:mv ^:decommission mv-isolate-node-decommission
   (run-test! isolate-node-test-decommission))
 
-(deftest ^:mv-set ^:decommission mv-set-halves-decommission
+(deftest ^:mv ^:decommission mv-halves-decommission
   (run-test! halves-test-decommission))
 
-(deftest ^:mv-set ^:decommission mv-set-crash-subset-decommission
+(deftest ^:mv ^:decommission mv-crash-subset-decommission
   (run-test! crash-subset-test-decommission))
 
-(deftest ^:clock mv-set-clock-drift-decommission
+(deftest ^:clock mv-clock-drift-decommission
   (run-test! clock-drift-test-decommission))

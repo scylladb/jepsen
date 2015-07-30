@@ -30,12 +30,13 @@
             [cassandra.conductors :as conductors])
   (:import (clojure.lang ExceptionInfo)
            (com.datastax.driver.core ConsistencyLevel)
+           (com.datastax.driver.core.policies FallthroughRetryPolicy)
            (com.datastax.driver.core.exceptions UnavailableException
                                                 WriteTimeoutException
                                                 ReadTimeoutException
                                                 NoHostAvailableException)))
 
-(defrecord MVSetClient [conn]
+(defrecord MVMapClient [conn]
   client/Client
   (setup! [_ test node]
     (locking setup-lock
@@ -46,38 +47,38 @@
                                     {:class "SimpleStrategy"
                                      :replication_factor 3}}))
         (cql/use-keyspace conn "jepsen_keyspace")
-        (cql/create-table conn "original"
+        (cql/create-table conn "map"
                           (if-not-exists)
-                          (column-definitions {:id :int
-                                               :mvid :int
-                                               :primary-key [:id]}))
-        (try (cassandra/execute conn (str "CREATE MATERIALIZED VIEW mv AS SELECT"
-                                          " * FROM original WHERE mvid IS NOT NULL"
-                                          " AND id IS NOT NULL "
-                                          "PRIMARY KEY (mvid, id);"))
+                          (column-definitions {:key :int
+                                               :value :int
+                                               :primary-key [:key]}))
+        (try (cassandra/execute conn (str "CREATE MATERIALIZED VIEW mvmap AS SELECT"
+                                          " * FROM map WHERE value IS NOT NULL"
+                                          " AND key IS NOT NULL "
+                                          "PRIMARY KEY (value, key);"))
              (catch com.datastax.driver.core.exceptions.AlreadyExistsException e))
-        (->MVSetClient conn))))
+        (->MVMapClient conn))))
   (invoke! [this test op]
     (case (:f op)
-      :add (try (with-consistency-level ConsistencyLevel/QUORUM
-                  (cql/insert conn
-                              "original"
-                              {:id (:value op)
-                               :mvid (:value op)}))
-                (assoc op :type :ok)
-                (catch UnavailableException e
-                  (assoc op :type :fail :value (.getMessage e)))
-                (catch WriteTimeoutException e
-                  (assoc op :type :info :value :timed-out))
-                (catch NoHostAvailableException e
-                  (info "All nodes are down - sleeping 2s")
-                  (Thread/sleep 2000)
-                  (assoc op :type :fail :value (.getMessage e))))
+      :assoc (try (with-retry-policy FallthroughRetryPolicy/INSTANCE
+                    (with-consistency-level ConsistencyLevel/QUORUM
+                      (cql/update conn
+                                  "map"
+                                  {:value (:v (:value op))}
+                                  (where [[= :key (:k (:value op))]]))))
+                  (assoc op :type :ok)
+                  (catch UnavailableException e
+                    (assoc op :type :fail :value (.getMessage e)))
+                  (catch WriteTimeoutException e
+                    (assoc op :type :info :value :timed-out))
+                  (catch NoHostAvailableException e
+                    (info "All nodes are down - sleeping 2s")
+                    (Thread/sleep 2000)
+                    (assoc op :type :fail :value (.getMessage e))))
       :read (try (let [value (->> (with-retry-policy aggressive-read
                                     (with-consistency-level ConsistencyLevel/ALL
-                                      (cql/select conn "mv")))
-                                  (map :mvid)
-                                  (into (sorted-set)))]
+                                      (cql/select conn "mvmap")))
+                                  (#(zipmap (map :key %) (map :value %))))]
                    (assoc op :type :ok :value value))
                  (catch UnavailableException e
                    (info "Not enough replicas - failing")
@@ -92,99 +93,106 @@
     (info "Tearing down client with conn" conn)
     (cassandra/disconnect! conn)))
 
-(defn mv-set-client
-  "A set implemented using MV"
+(defn mv-map-client
+  "A map implemented using MV"
   []
-  (->MVSetClient nil))
+  (->MVMapClient nil))
 
-(defn mv-set-test
+(defn mv-map-test
   [name opts]
-  (merge (cassandra-test (str "mv set " name)
-                         {:client (mv-set-client)
-                          :model (model/set)
+  (merge (cassandra-test (str "mv contended map " name)
+                         {:client (mv-map-client)
                           :generator (gen/phases
-                                      (->> (gen/clients (adds))
+                                      (->> (gen/clients (assocs identity))
                                            (gen/delay 1)
-                                           std-gen)
+                                           (std-gen 250))
+                                      (gen/conductor :replayer
+                                                     (gen/once {:type :info :f :replay}))
+                                      (read-once)
+                                      (->> (gen/clients (assocs -))
+                                           (gen/delay 1)
+                                           (std-gen 250))
                                       (gen/conductor :replayer
                                                      (gen/once {:type :info :f :replay}))
                                       (read-once))
                           :checker (checker/compose
-                                    {:set checker/set})})
+                                    {:map checker/associative-map})})
          (merge-with merge {:conductors {:replayer (conductors/replayer)}} opts)))
 
+
+;; Uncontended tests
 (def bridge-test
-  (mv-set-test "bridge"
+  (mv-map-test "bridge"
                {:conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))}}))
 
 (def halves-test
 
-  (mv-set-test "halves"
+  (mv-map-test "halves"
                {:conductors {:nemesis (nemesis/partition-random-halves)}}))
 
 (def isolate-node-test
-  (mv-set-test "isolate node"
+  (mv-map-test "isolate node"
                {:conductors {:nemesis (nemesis/partition-random-node)}}))
 
 (def crash-subset-test
-  (mv-set-test "crash"
+  (mv-map-test "crash"
                {:conductors {:nemesis (crash-nemesis)}}))
 
 (def clock-drift-test
-  (mv-set-test "clock drift"
+  (mv-map-test "clock drift"
                {:conductors {:nemesis (nemesis/clock-scrambler 10000)}}))
 
 (def bridge-test-bootstrap
-  (mv-set-test "bridge bootstrap"
+  (mv-map-test "bridge bootstrap"
                {:bootstrap (atom #{:n4 :n5})
                 :conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))
                              :bootstrapper (conductors/bootstrapper)}}))
 
 (def halves-test-bootstrap
-  (mv-set-test "halves bootstrap"
+  (mv-map-test "halves bootstrap"
                {:bootstrap (atom #{:n4 :n5})
                 :conductors {:nemesis (nemesis/partition-random-halves)
                              :bootstrapper (conductors/bootstrapper)}}))
 
 (def isolate-node-test-bootstrap
-  (mv-set-test "isolate node bootstrap"
+  (mv-map-test "isolate node bootstrap"
                {:bootstrap (atom #{:n4 :n5})
                 :conductors {:nemesis (nemesis/partition-random-node)
                              :bootstrapper (conductors/bootstrapper)}}))
 
 (def crash-subset-test-bootstrap
-  (mv-set-test "crash bootstrap"
+  (mv-map-test "crash bootstrap"
                {:bootstrap (atom #{:n4 :n5})
                 :conductors {:nemesis (crash-nemesis)
                              :bootstrapper (conductors/bootstrapper)}}))
 
 (def clock-drift-test-bootstrap
-  (mv-set-test "clock drift bootstrap"
+  (mv-map-test "clock drift bootstrap"
                {:bootstrap (atom #{:n4 :n5})
                 :conductors {:nemesis (nemesis/clock-scrambler 10000)
                              :bootstrapper (conductors/bootstrapper)}}))
 
 (def bridge-test-decommission
-  (mv-set-test "bridge decommission"
+  (mv-map-test "bridge decommission"
                {:conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))
                              :decommissioner (conductors/decommissioner)}}))
 
 (def halves-test-decommission
-  (mv-set-test "halves decommission"
+  (mv-map-test "halves decommission"
                {:conductors {:nemesis (nemesis/partition-random-halves)
                              :decommissioner (conductors/decommissioner)}}))
 
 (def isolate-node-test-decommission
-  (mv-set-test "isolate node decommission"
+  (mv-map-test "isolate node decommission"
                {:conductors {:nemesis (nemesis/partition-random-node)
                              :decommissioner (conductors/decommissioner)}}))
 
 (def crash-subset-test-decommission
-  (mv-set-test "crash decommission"
+  (mv-map-test "crash decommission"
                {:conductors {:nemesis (crash-nemesis)
                              :decommissioner (conductors/decommissioner)}}))
 
 (def clock-drift-test-decommission
-  (mv-set-test "clock drift decommission"
+  (mv-map-test "clock drift decommission"
                {:conductors {:nemesis (nemesis/clock-scrambler 10000)
                              :decommissioner (conductors/decommissioner)}}))

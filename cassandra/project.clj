@@ -5,14 +5,14 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.6.0"]
                  [org.clojure/java.jmx "0.3.1"]
-                 [jepsen "0.0.4"]
-                 [clojurewerkz/cassaforte "2.1.0-beta1"]
+                 [jkni/jepsen "0.0.5-SNAPSHOT"]
+                 [jkni/cassaforte "trunk-SNAPSHOT"]
                  [com.codahale.metrics/metrics-core "3.0.2"]]
   :test-selectors {:steady :steady
                    :bootstrap :bootstrap
                    :map :map
                    :set :set
-                   :mv-set :mv-set
+                   :mv :mv
                    :batch-set :batch-set
                    :lwt :lwt
                    :decommission :decommission

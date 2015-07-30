@@ -248,23 +248,24 @@
 (defn std-gen
   "Takes a client generator and wraps it in a typical schedule and nemesis
   causing failover."
-  [gen]
-  (gen/phases
-   (->> gen
-        (gen/nemesis
-         (gen/seq (cycle [(gen/sleep (scaled 15))
-                          {:type :info :f :start}
-                          (gen/sleep (scaled 45))
-                          {:type :info :f :stop}])))
-        (bootstrap 120)
-        (gen/conductor :decommissioner
-                       (gen/seq (cycle [(gen/sleep (scaled 100))
-                                        {:type :info :f :decommission}])))
-        (gen/time-limit (scaled 400)))
-   (recover)
-   (gen/clients
+  ([gen] (std-gen 400 gen))
+  ([duration gen]
+   (gen/phases
     (->> gen
-         (gen/time-limit (scaled 40))))))
+         (gen/nemesis
+          (gen/seq (cycle [(gen/sleep (scaled 15))
+                           {:type :info :f :start}
+                           (gen/sleep (scaled 45))
+                           {:type :info :f :stop}])))
+         (bootstrap 120)
+         (gen/conductor :decommissioner
+                        (gen/seq (cycle [(gen/sleep (scaled 100))
+                                         {:type :info :f :decommission}])))
+         (gen/time-limit (scaled duration)))
+    (recover)
+    (gen/clients
+     (->> gen
+          (gen/time-limit (scaled 40)))))))
 
 (def add {:type :invoke :f :add :value 1})
 (def sub {:type :invoke :f :add :value -1})
@@ -277,6 +278,15 @@
   []
   (->> (range)
        (map (fn [x] {:type :invoke, :f :add, :value x}))
+       gen/seq))
+
+(defn assocs
+  "Generator that emits :assoc operations for sequential integers,
+  mapping x to (f x)"
+  [f]
+  (->> (range)
+       (map (fn [x] {:type :invoke :f :assoc :value {:k x
+                                                     :v (f x)}}))
        gen/seq))
 
 (defn read-once
