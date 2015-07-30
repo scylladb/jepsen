@@ -16,7 +16,7 @@
   (:use     clojure.tools.logging)
   (:require [clojure.stacktrace :as trace]
             [clojure.string :as str]
-            [clojure.pprint :refer [pprint]]
+            [fipp.edn :refer [pprint]]
             [knossos.core :as knossos]
             [jepsen.util :as util :refer [with-thread-name
                                           relative-time-nanos]]
