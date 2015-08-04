@@ -86,7 +86,9 @@
                                         (cql/select conn "b")))
                                     (map :value)
                                     (into (sorted-set)))]
-                   (assoc op :type :ok :value (set/intersection value-a value-b)))
+                   (if-not (= value-a value-b)
+                     (assoc op :type :fail :value [value-a value-b])
+                     (assoc op :type :ok :value value-a)))
                  (catch UnavailableException e
                    (info "Not enough replicas - failing")
                    (assoc op :type :fail :value (.getMessage e)))
