@@ -8,6 +8,7 @@
                  [jkni/jepsen "0.0.5-SNAPSHOT"]
                  [jkni/cassaforte "trunk-SNAPSHOT"]
                  [com.codahale.metrics/metrics-core "3.0.2"]]
+  :profiles {:dev {:plugins [[test2junit "1.1.1"]]}}
   :test-selectors {:steady :steady
                    :bootstrap :bootstrap
                    :map :map
