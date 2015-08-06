@@ -6,9 +6,10 @@
   :dependencies [[org.clojure/clojure "1.7.0"]
                  [org.clojure/java.jmx "0.3.1"]
                  [jkni/jepsen "0.0.5-SNAPSHOT"]
-                 [jkni/cassaforte "trunk-SNAPSHOT"]
+                 [clojurewerkz/cassaforte "2.1.0-beta1"]
                  [com.codahale.metrics/metrics-core "3.0.2"]]
-  :profiles {:dev {:plugins [[test2junit "1.1.1"]]}}
+  :profiles {:dev {:plugins [[test2junit "1.1.1"]]}
+             :trunk {:dependencies [[clojurewerkz/cassaforte "trunk-SNAPSHOT"]]}}
   :test-selectors {:steady :steady
                    :bootstrap :bootstrap
                    :map :map
