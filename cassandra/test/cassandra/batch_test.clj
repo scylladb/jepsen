@@ -7,49 +7,49 @@
              [report :as report]]))
 
 ;; Steady state cluster tests
-(deftest ^:batch-set ^:steady batch-set-bridge
+(deftest ^:batch ^:steady batch-bridge
   (run-test! bridge-test))
 
-(deftest ^:batch-set ^:steady batch-set-isolate-node
+(deftest ^:batch ^:steady batch-isolate-node
   (run-test! isolate-node-test))
 
-(deftest ^:batch-set ^:steady batch-set-halves
+(deftest ^:batch ^:steady batch-halves
   (run-test! halves-test))
 
-(deftest ^:batch-set ^:steady batch-set-crash-subset
+(deftest ^:batch ^:steady batch-crash-subset
   (run-test! crash-subset-test))
 
-(deftest ^:clock batch-set-clock-drift
+(deftest ^:clock batch-clock-drift
   (run-test! clock-drift-test))
 
 ;; Bootstrapping tests
-(deftest ^:batch-set ^:bootstrap batch-set-bridge-bootstrap
+(deftest ^:batch ^:bootstrap batch-bridge-bootstrap
   (run-test! bridge-test-bootstrap))
 
-(deftest ^:batch-set ^:bootstrap batch-set-isolate-node-bootstrap
+(deftest ^:batch ^:bootstrap batch-isolate-node-bootstrap
   (run-test! isolate-node-test-bootstrap))
 
-(deftest ^:batch-set ^:bootstrap batch-set-halves-bootstrap
+(deftest ^:batch ^:bootstrap batch-halves-bootstrap
   (run-test! halves-test-bootstrap))
 
-(deftest ^:batch-set ^:bootstrap batch-set-crash-subset-bootstrap
+(deftest ^:batch ^:bootstrap batch-crash-subset-bootstrap
   (run-test! crash-subset-test-bootstrap))
 
-(deftest ^:clock batch-set-clock-drift-bootstrap
+(deftest ^:clock batch-clock-drift-bootstrap
   (run-test! clock-drift-test-bootstrap))
 
 ;; Decommission tests
-(deftest ^:batch-set ^:decommission batch-set-bridge-decommission
+(deftest ^:batch ^:decommission batch-bridge-decommission
   (run-test! bridge-test-decommission))
 
-(deftest ^:batch-set ^:decommission batch-set-isolate-node-decommission
+(deftest ^:batch ^:decommission batch-isolate-node-decommission
   (run-test! isolate-node-test-decommission))
 
-(deftest ^:batch-set ^:decommission batch-set-halves-decommission
+(deftest ^:batch ^:decommission batch-halves-decommission
   (run-test! halves-test-decommission))
 
-(deftest ^:batch-set ^:decommission batch-set-crash-subset-decommission
+(deftest ^:batch ^:decommission batch-crash-subset-decommission
   (run-test! crash-subset-test-decommission))
 
-(deftest ^:clock batch-set-clock-drift-decommission
+(deftest ^:clock batch-clock-drift-decommission
   (run-test! clock-drift-test-decommission))

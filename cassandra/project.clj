@@ -15,7 +15,7 @@
                    :map :map
                    :set :set
                    :mv :mv
-                   :batch-set :batch-set
+                   :batch :batch
                    :lwt :lwt
                    :decommission :decommission
                    :counter :counter
