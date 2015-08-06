@@ -124,6 +124,10 @@
   (cql-map-test "crash"
                 {:conductors {:nemesis (crash-nemesis)}}))
 
+(def flush-compact-test
+  (cql-map-test "flush and compact"
+                {:conductors {:nemesis (conductors/flush-and-compacter)}}))
+
 (def bridge-test-bootstrap
   (cql-map-test "bridge bootstrap"
                 {:bootstrap (atom #{:n4 :n5})

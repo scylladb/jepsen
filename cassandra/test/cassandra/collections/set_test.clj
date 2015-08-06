@@ -18,6 +18,9 @@
 (deftest ^:set ^:steady cql-set-crash-subset
   (run-test! crash-subset-test))
 
+(deftest ^:set ^:steady cql-set-flush-compact
+  (run-test! flush-compact-test))
+
 (deftest ^:set ^:bootstrap cql-set-bridge-bootstrap
   (run-test! bridge-test-bootstrap))
 

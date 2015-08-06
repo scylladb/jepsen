@@ -46,3 +46,17 @@
           (cassandra/nodetool node "replaybatchlog"))
         (assoc op :value (str live-nodes " batch logs replayed"))))
     (teardown! [this test] this)))
+
+(defn flush-and-compacter
+  "Flushes to sstables and forces a major compaction on all nodes"
+  []
+  (reify client/Client
+    (setup! [this test node] this)
+    (invoke! [this test op]
+      (case (:f op)
+        :start (do (doseq [node (:nodes test)]
+                     (cassandra/nodetool node "flush")
+                     (cassandra/nodetool node "compact"))
+                   (assoc op :value (str (:nodes test) " nodes flushed and compacted")))
+        :stop (assoc op :value "stop is a no-op with this nemesis")))
+    (teardown! [this test] this)))
