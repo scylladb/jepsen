@@ -51,12 +51,16 @@
                           (if-not-exists)
                           (column-definitions {:id :int
                                                :value :int
-                                               :primary-key [:id]}))
+                                               :primary-key [:id]})
+                          (with {:compaction
+                                 {:class (compaction-strategy)}}))
         (cql/create-table conn "b"
                           (if-not-exists)
                           (column-definitions {:id :int
                                                :value :int
-                                               :primary-key [:id]}))
+                                               :primary-key [:id]})
+                          (with {:compaction
+                                 {:class (compaction-strategy)}}))
         (->BatchSetClient conn))))
   (invoke! [this test op]
     (case (:f op)

@@ -51,11 +51,16 @@
                           (if-not-exists)
                           (column-definitions {:key :int
                                                :value :int
-                                               :primary-key [:key]}))
+                                               :primary-key [:key]})
+                          (with {:compaction
+                                 {:class (compaction-strategy)}}))
         (try (cassandra/execute conn (str "CREATE MATERIALIZED VIEW mvmap AS SELECT"
                                           " * FROM map WHERE value IS NOT NULL"
                                           " AND key IS NOT NULL "
-                                          "PRIMARY KEY (value, key);"))
+                                          "PRIMARY KEY (value, key)"
+                                          "WITH compaction = "
+                                          "{'class' : '" (compaction-strategy)
+                                          "'};"))
              (catch com.datastax.driver.core.exceptions.AlreadyExistsException e))
         (->MVMapClient conn))))
   (invoke! [this test op]

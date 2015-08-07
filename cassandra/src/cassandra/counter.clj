@@ -48,7 +48,9 @@
                           (if-not-exists)
                           (column-definitions {:id :int
                                                :count :counter
-                                               :primary-key [:id]}))
+                                               :primary-key [:id]})
+                          (with {:compaction
+                                 {:class (compaction-strategy)}}))
         (cql/update conn "counters" {:count (increment-by 0)}
                     (where [[= :id 0]]))
         (->CQLCounterClient conn writec))))

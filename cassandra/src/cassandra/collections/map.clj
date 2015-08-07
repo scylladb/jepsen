@@ -48,7 +48,9 @@
                           (if-not-exists)
                           (column-definitions {:id :int
                                                :elements (map-type :int :int)
-                                               :primary-key [:id]}))
+                                               :primary-key [:id]})
+                          (with {:compaction
+                                 {:class (compaction-strategy)}}))
         (cql/insert conn "maps"
                     {:id 0
                      :elements {}})

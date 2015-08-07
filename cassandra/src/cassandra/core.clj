@@ -41,6 +41,12 @@
                    1)]
     (Math/ceil (* v factor))))
 
+(defn compaction-strategy
+  "Returns the compaction strategy to use"
+  []
+  (or (System/getenv "JEPSEN_COMPACTION_STRATEGY")
+      "SizeTieredCompactionStrategy"))
+
 (defn wait-for-recovery
   "Waits for the driver to report all nodes are up"
   [timeout-secs conn]

@@ -54,7 +54,9 @@
                           (if-not-exists)
                           (column-definitions {:id :int
                                                :value :int
-                                               :primary-key [:id]}))
+                                               :primary-key [:id]})
+                          (with {:compaction
+                                 {:class (compaction-strategy)}}))
         (->CasRegisterClient conn))))
   (invoke! [this test op]
     (case (:f op)
