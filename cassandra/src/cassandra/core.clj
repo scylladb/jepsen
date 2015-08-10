@@ -47,6 +47,12 @@
   (or (System/getenv "JEPSEN_COMPACTION_STRATEGY")
       "SizeTieredCompactionStrategy"))
 
+(defn compressed-commitlog?
+  "Returns whether to use commitlog compression"
+  []
+  (= (clojure.string/lower-case (System/getenv "JEPSEN_COMMITLOG_COMPRESSION"))
+     "true"))
+
 (defn wait-for-recovery
   "Waits for the driver to report all nodes are up"
   [timeout-secs conn]
@@ -164,20 +170,24 @@
                      ".authenticate=true\"/JVM_OPTS=\"$JVM_OPTS -Dcom.sun.management"
                      ".jmxremote.authenticate=false\"/g'")]]
      (c/exec :sed :-i (lit rep) "~/cassandra/conf/cassandra-env.sh"))
-   (doseq [rep ["\"s/cluster_name: .*/cluster_name: 'jepsen'/g\""
-                "\"s/row_cache_size_in_mb: .*/row_cache_size_in_mb: 20/g\""
-                "\"s/seeds: .*/seeds: 'n1,n2'/g\""
-                (str "\"s/listen_address: .*/listen_address: " (dns-resolve node)
-                     "/g\"")
-                (str "\"s/rpc_address: .*/rpc_address: " (dns-resolve node) "/g\"")
-                (str "\"s/broadcast_rpc_address: .*/broadcast_rpc_address: "
-                     (net/local-ip) "/g\"")
-                "\"s/internode_compression: .*/internode_compression: none/g\""
-                "\"s/commitlog_sync: .*/commitlog_sync: batch/g\""
-                (str "\"s/# commitlog_sync_batch_window_in_ms: .*/"
-                     "commitlog_sync_batch_window_in_ms: 1.0/g\"")
-                "\"s/commitlog_sync_period_in_ms: .*/#/g\""
-                "\"/auto_bootstrap: .*/d\""]]
+   (doseq [rep (into ["\"s/cluster_name: .*/cluster_name: 'jepsen'/g\""
+                      "\"s/row_cache_size_in_mb: .*/row_cache_size_in_mb: 20/g\""
+                      "\"s/seeds: .*/seeds: 'n1,n2'/g\""
+                      (str "\"s/listen_address: .*/listen_address: " (dns-resolve node)
+                           "/g\"")
+                      (str "\"s/rpc_address: .*/rpc_address: " (dns-resolve node) "/g\"")
+                      (str "\"s/broadcast_rpc_address: .*/broadcast_rpc_address: "
+                           (net/local-ip) "/g\"")
+                      "\"s/internode_compression: .*/internode_compression: none/g\""
+                      "\"s/commitlog_sync: .*/commitlog_sync: batch/g\""
+                      (str "\"s/# commitlog_sync_batch_window_in_ms: .*/"
+                           "commitlog_sync_batch_window_in_ms: 1.0/g\"")
+                      "\"s/commitlog_sync_period_in_ms: .*/#/g\""
+                      "\"/auto_bootstrap: .*/d\""]
+                     (when (compressed-commitlog?)
+                       ["\"s/#commitlog_compression.*/commitlog_compression:/g\""
+                        (str "\"s/#   - class_name: LZ4Compressor/"
+                             "    - class_name: LZ4Compressor/g\"")]))]
      (c/exec :sed :-i (lit rep) "~/cassandra/conf/cassandra.yaml"))
    (c/exec :echo (str "auto_bootstrap: " (-> test :bootstrap node boolean))
            :>> "~/cassandra/conf/cassandra.yaml")))
