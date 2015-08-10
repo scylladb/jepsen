@@ -19,6 +19,9 @@
 (deftest ^:counter ^:steady cql-counter-inc-crash-subset
   (run-test! crash-subset-inc-test))
 
+(deftest ^:counter ^:steady cql-counter-inc-flush-compact
+  (run-test! flush-compact-inc-test))
+
 (deftest ^:counter ^:steady cql-counter-inc-dec-bridge
   (run-test! bridge-inc-dec-test))
 
@@ -30,6 +33,9 @@
 
 (deftest ^:counter ^:steady cql-counter-inc-dec-crash-subset
   (run-test! crash-subset-inc-dec-test))
+
+(deftest ^:counter ^:steady cql-counter-inc-dec-flush-compact
+  (run-test! flush-compact-inc-dec-test))
 
 ;; Bootstrapping tests
 (deftest ^:counter ^:bootstrap cql-counter-inc-bridge-bootstrap

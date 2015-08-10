@@ -19,6 +19,9 @@
 (deftest ^:mv ^:steady mv-crash-subset
   (run-test! crash-subset-test))
 
+(deftest ^:mv ^:steady mv-flush-compact
+  (run-test! flush-compact-test))
+
 (deftest ^:clock mv-clock-drift
   (run-test! clock-drift-test))
 

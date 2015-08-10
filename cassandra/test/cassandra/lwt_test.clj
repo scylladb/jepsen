@@ -19,6 +19,9 @@
 (deftest ^:lwt ^:steady lwt-crash-subset
   (run-test! crash-subset-test))
 
+(deftest ^:lwt ^:steady lwt-flush-compact
+  (run-test! flush-compact-test))
+
 (deftest ^:clock lwt-clock-drift
   (run-test! clock-drift-test))
 

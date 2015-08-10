@@ -147,6 +147,10 @@
   (mv-map-test "clock drift"
                {:conductors {:nemesis (nemesis/clock-scrambler 10000)}}))
 
+(def flush-compact-test
+  (mv-map-test "flush and compact"
+               {:conductors {:nemesis (conductors/flush-and-compacter)}}))
+
 (def bridge-test-bootstrap
   (mv-map-test "bridge bootstrap"
                {:bootstrap (atom #{:n4 :n5})

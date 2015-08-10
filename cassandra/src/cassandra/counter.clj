@@ -135,6 +135,10 @@
   (cql-counter-inc-test "isolate node"
                         {:conductors {:nemesis (nemesis/partition-random-node)}}))
 
+(def flush-compact-inc-test
+  (cql-counter-inc-test "flush and compact"
+                  {:conductors {:nemesis (conductors/flush-and-compacter)}}))
+
 (def crash-subset-inc-test
   (cql-counter-inc-test "crash"
                         {:conductors {:nemesis (crash-nemesis)}}))
@@ -154,6 +158,10 @@
 (def crash-subset-inc-dec-test
   (cql-counter-inc-dec-test "crash"
                             {:conductors {:nemesis (crash-nemesis)}}))
+
+(def flush-compact-inc-dec-test
+  (cql-counter-inc-dec-test "flush and compact"
+                            {:conductors {:nemesis (conductors/flush-and-compacter)}}))
 
 (def bridge-inc-test-bootstrap
   (cql-counter-inc-test "bridge bootstrap"

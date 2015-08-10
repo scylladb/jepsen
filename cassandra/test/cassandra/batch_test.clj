@@ -19,6 +19,9 @@
 (deftest ^:batch ^:steady batch-crash-subset
   (run-test! crash-subset-test))
 
+(deftest ^:batch ^:steady batch-flush-compact
+  (run-test! flush-compact-test))
+
 (deftest ^:clock batch-clock-drift
   (run-test! clock-drift-test))
 

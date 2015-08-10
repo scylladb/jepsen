@@ -169,6 +169,10 @@
   (cas-register-test "crash"
                      {:conductors {:nemesis (crash-nemesis)}}))
 
+(def flush-compact-test
+  (cas-register-test "flush and compact"
+                  {:conductors {:nemesis (conductors/flush-and-compacter)}}))
+
 (def clock-drift-test
   (cas-register-test "clock drift"
                      {:conductors {:nemesis (nemesis/clock-scrambler 10000)}}))

@@ -148,6 +148,10 @@
   (batch-set-test "clock drift"
                   {:conductors {:nemesis (nemesis/clock-scrambler 10000)}}))
 
+(def flush-compact-test
+  (batch-set-test "flush and compact"
+                  {:conductors {:nemesis (conductors/flush-and-compacter)}}))
+
 (def bridge-test-bootstrap
   (batch-set-test "bridge bootstrap"
                   {:bootstrap (atom #{:n4 :n5})
