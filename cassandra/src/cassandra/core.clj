@@ -34,7 +34,7 @@
 
 (defn scaled
   "Applies a scaling factor to a number - used for durations
-  throughout testing to easicaly scale the run time of the whole
+  throughout testing to easily scale the run time of the whole
   test suite. Accepts doubles."
   [v]
   (let [factor (or (some-> (System/getenv "JEPSEN_SCALE") (Double/parseDouble))
@@ -50,7 +50,7 @@
 (defn compressed-commitlog?
   "Returns whether to use commitlog compression"
   []
-  (= (clojure.string/lower-case (System/getenv "JEPSEN_COMMITLOG_COMPRESSION"))
+  (= (some-> (System/getenv "JEPSEN_COMMITLOG_COMPRESSION") (clojure.string/lower-case))
      "true"))
 
 (defn wait-for-recovery
