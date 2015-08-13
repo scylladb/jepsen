@@ -66,7 +66,7 @@
   (invoke! [this test op]
     (case (:f op)
       :assoc (try (with-retry-policy FallthroughRetryPolicy/INSTANCE
-                    (with-consistency-level ConsistencyLevel/QUORUM
+                    (with-consistency-level ConsistencyLevel/ONE
                       (cql/update conn
                                   "map"
                                   {:value (:v (:value op))}
