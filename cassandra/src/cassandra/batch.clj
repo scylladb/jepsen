@@ -120,9 +120,8 @@
                                       (->> (gen/clients (adds))
                                            (gen/delay 1)
                                            std-gen)
-                                      ;; (gen/conductor :replayer
-                                      ;;                (gen/delay 70 (gen/once {:type :info :f :replay})))
-                                      (read-once))
+                                      (gen/delay 65
+                                                 (read-once)))
                           :checker (checker/compose
                                     {:set checker/set})})
          (merge-with merge {:conductors {:replayer (conductors/replayer)}} opts)))
