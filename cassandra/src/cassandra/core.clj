@@ -232,13 +232,16 @@
   [version]
   (reify db/DB
     (setup! [_ test node]
+      (when (seq (System/getenv "LEAVE_CLUSTER_RUNNING"))
+        (wipe! node))
       (doto node
         (install! version)
         (configure! test)
         (guarded-start! test)))
 
     (teardown! [_ test node]
-      (wipe! node))
+      (when-not (seq (System/getenv "LEAVE_CLUSTER_RUNNING"))
+          (wipe! node)))
 
     db/LogFiles
     (log-files [db test node]
