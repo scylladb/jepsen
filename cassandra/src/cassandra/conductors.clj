@@ -31,7 +31,7 @@
           (do (info node "decommissioning")
               (info @decommission "already decommissioned")
               (swap! decommission conj node)
-              (meh (cassandra/nodetool node "decommission"))
+              (cassandra/nodetool node "decommission")
               (assoc op :value (str node " decommissioned")))
           (assoc op :value "no nodes eligible for decommission"))))
     (teardown! [this test] this)))
