@@ -147,7 +147,7 @@
                                             (gen/seq (cycle
                                                       [(gen/sleep 4)
                                                        {:type :info :f :decommission}])))
-                                           (gen/time-limit 24))
+                                           (gen/time-limit 20))
                                       gen/void)
                           :checker (checker/compose
                                     {:linear extra-checker/enhanced-linearizable})})
