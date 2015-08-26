@@ -189,7 +189,7 @@
                         (str "\"s/#   - class_name: LZ4Compressor/"
                              "    - class_name: LZ4Compressor/g\"")]))]
      (c/exec :sed :-i (lit rep) "~/cassandra/conf/cassandra.yaml"))
-   (c/exec :echo (str "auto_bootstrap: " (-> test :bootstrap node boolean))
+   (c/exec :echo (str "auto_bootstrap: " (-> test :bootstrap deref node boolean))
            :>> "~/cassandra/conf/cassandra.yaml")))
 
 (defn start!
