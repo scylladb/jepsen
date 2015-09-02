@@ -72,7 +72,7 @@
 (defn live-nodes
   "Get the list of live nodes from a random node in the cluster"
   [test]
-  (set (some (fn [node]          
+  (set (some (fn [node]
                (try (jmx/with-connection {:host (name node) :port 7199}
                       (jmx/read "org.apache.cassandra.db:type=StorageService"
                                 :LiveNodes))
@@ -81,6 +81,19 @@
              (-> test :nodes set (set/difference @(:bootstrap test))
                  (#(map (comp dns-resolve name) %)) set (set/difference @(:decommission test))
                  shuffle))))
+
+(defn joining-nodes
+  "Get the list of joining nodes from a random node in the cluster"
+  [test]
+  (set (mapcat (fn [node]
+                 (try (jmx/with-connection {:host (name node) :port 7199}
+                        (jmx/read "org.apache.cassandra.db:type=StorageService"
+                                  :JoiningNodes))
+                      (catch Exception e
+                        (info "Couldn't get status from node" node))))
+               (-> test :nodes set (set/difference @(:bootstrap test))
+                   (#(map (comp dns-resolve name) %)) set (set/difference @(:decommission test))
+                   shuffle))))
 
 (defn nodetool
   "Run a nodetool command"
@@ -189,7 +202,7 @@
                         (str "\"s/#   - class_name: LZ4Compressor/"
                              "    - class_name: LZ4Compressor/g\"")]))]
      (c/exec :sed :-i (lit rep) "~/cassandra/conf/cassandra.yaml"))
-   (c/exec :echo (str "auto_bootstrap: " (-> test :bootstrap node boolean))
+   (c/exec :echo (str "auto_bootstrap: " (-> test :bootstrap deref node boolean))
            :>> "~/cassandra/conf/cassandra.yaml")))
 
 (defn start!
@@ -214,7 +227,10 @@
   [node]
   (info node "stopping Cassandra")
   (c/su
-   (meh (c/exec :killall :java))))
+   (meh (c/exec :killall :java))
+   (while (.contains (c/exec :ps :-ef) "java")
+     (Thread/sleep 100)))
+  (info node "has stopped Cassandra"))
 
 (defn wipe!
   "Shuts down Cassandra and wipes data."
@@ -224,6 +240,7 @@
   (c/su
    (meh (c/exec :rm :-r "~/cassandra/logs/system.log"))
    (meh (c/exec :rm :-r "~/cassandra/data/data"))
+   (meh (c/exec :rm :-r "~/cassandra/data/hints"))
    (meh (c/exec :rm :-r "~/cassandra/data/commitlog"))
    (meh (c/exec :rm :-r "~/cassandra/data/saved_caches"))))
 

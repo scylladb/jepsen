@@ -13,9 +13,13 @@
     (invoke! [this test op]
       (let [bootstrap (:bootstrap test)]
         (if-let [node (first @bootstrap)]
-          (do (info node "bootstrapping")
+          (do (info node "starting bootstrapping")
               (swap! bootstrap rest)
               (c/on node (cassandra/start! node test))
+              (while (some #{cassandra/dns-resolve (name node)}
+                           (cassandra/joining-nodes test))
+                (info node "still joining")
+                (Thread/sleep 1000))
               (assoc op :value (str node " bootstrapped")))
           (assoc op :value "no nodes left to bootstrap"))))
     (teardown! [this test] this)))
