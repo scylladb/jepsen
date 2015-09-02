@@ -147,8 +147,12 @@
                                             (gen/seq (cycle
                                                       [(gen/sleep 4)
                                                        {:type :info :f :decommission}])))
-                                           (gen/time-limit 24))
-                                      gen/void)
+                                           (gen/time-limit 30))
+                                      (->> gen/void
+                                           (gen/conductor
+                                            :bootstrapper
+                                            (gen/once {:type :info :f :bootstrapper}))
+                                           gen/barrier))
                           :checker (checker/compose
                                     {:linear extra-checker/enhanced-linearizable})})
          opts))

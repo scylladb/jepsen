@@ -289,9 +289,9 @@
    (gen/phases
     (->> gen
          (gen/nemesis
-          (gen/seq (cycle [(gen/sleep (scaled 15))
+          (gen/seq (cycle [(gen/sleep (scaled 20))
                            {:type :info :f :start}
-                           (gen/sleep (scaled 45))
+                           (gen/sleep (scaled 60))
                            {:type :info :f :stop}])))
          (bootstrap 120)
          (gen/conductor :decommissioner
