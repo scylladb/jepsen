@@ -31,13 +31,18 @@
            (com.datastax.driver.core.exceptions UnavailableException
                                                 WriteTimeoutException
                                                 ReadTimeoutException
-                                                NoHostAvailableException)))
+                                                NoHostAvailableException)
+           (com.datastax.driver.core.policies FallthroughRetryPolicy
+                                              ConstantSpeculativeExecutionPolicy)))
 
 (defrecord CQLCounterClient [conn writec]
   client/Client
   (setup! [_ test node]
     (locking setup-lock
-      (let [conn (cassandra/connect (->> test :nodes (map name)))]
+      (let [conn (cassandra/connect
+                  (->> test :nodes (map name))
+                  ;{:speculative-execution-policy (ConstantSpeculativeExecutionPolicy. 100000000 1)}
+                  )]
         (cql/create-keyspace conn "jepsen_keyspace"
                              (if-not-exists)
                              (with {:replication
@@ -51,17 +56,19 @@
                                                :primary-key [:id]})
                           (with {:compaction
                                  {:class (compaction-strategy)}}))
-        (cql/update conn "counters" {:count (increment-by 0)}
+        (cql/update conn {:enable-tracing false} "counters" {:count (increment-by 0)}
                     (where [[= :id 0]]))
+        (info "Speculative executions" (.getCount (.getSpeculativeExecutions (.getErrorMetrics (.getMetrics (.getCluster conn))))))
         (->CQLCounterClient conn writec))))
   (invoke! [this test op]
     (case (:f op)
       :add (try (do
-                  (with-consistency-level writec
-                    (cql/update conn
-                                "counters"
-                                {:count (increment-by (:value op))}
-                                (where [[= :id 0]])))
+                  (with-retry-policy FallthroughRetryPolicy/INSTANCE
+                    (with-consistency-level writec
+                      (cql/update conn {:enable-tracing true}
+                                  "counters"
+                                  {:count (increment-by (:value op))}
+                                  (where [[= :id 0]]))))
                   (assoc op :type :ok))
                 (catch UnavailableException e
                   (assoc op :type :fail :error (.getMessage e)))
@@ -71,9 +78,11 @@
                   (info "All the servers are down - waiting 2s")
                   (Thread/sleep 2000)
                   (assoc op :type :fail :error (.getMessage e))))
-      :read (try (let [value (->> (with-consistency-level ConsistencyLevel/ALL
-                                    (cql/select conn "counters"
-                                                (where [[= :id 0]])))
+      :read (try (let [value (->> (with-retry-policy FallthroughRetryPolicy/INSTANCE
+                                    (with-consistency-level ConsistencyLevel/ALL
+                                      (cql/select conn {:enable-tracing true}
+                                                  "counters"
+                                                  (where [[= :id 0]]))))
                                   first
                                   :count)]
                    (assoc op :type :ok :value value))
@@ -88,6 +97,8 @@
                    (assoc op :type :fail :error (.getMessage e))))))
   (teardown! [_ _]
     (info "Tearing down client with conn" conn)
+    (info "Speculative executions" (.getCount (.getSpeculativeExecutions (.getErrorMetrics (.getMetrics (.getCluster conn))))))
+    (info "Total" (.getCount (.getRequestsTimer (.getMetrics (.getCluster conn)))))
     (cassandra/disconnect! conn)))
 
 (defn cql-counter-client

@@ -53,6 +53,22 @@
   (= (some-> (System/getenv "JEPSEN_COMMITLOG_COMPRESSION") (clojure.string/lower-case))
      "true"))
 
+(defn coordinator-batchlog-disabled?
+  "Returns whether to disable the coordinator batchlog for MV"
+  []
+  (boolean (System/getenv "JEPSEN_DISABLE_COORDINATOR_BATCHLOG")))
+
+(defn phi-level
+  "Returns the value to use for phi in the failure detector"
+  []
+  (or (System/getenv "JEPSEN_PHI_VALUE")
+      8))
+
+(defn disable-hints?
+  "Returns true if Jepsen tests should run without hints"
+  []
+  (not (System/getenv "JEPSEN_DISABLE_HINTS")))
+
 (defn wait-for-recovery
   "Waits for the driver to report all nodes are up"
   [timeout-secs conn]
@@ -181,7 +197,8 @@
                      )
                 (str "'s/JVM_OPTS=\"$JVM_OPTS -Dcom.sun.management.jmxremote"
                      ".authenticate=true\"/JVM_OPTS=\"$JVM_OPTS -Dcom.sun.management"
-                     ".jmxremote.authenticate=false\"/g'")]]
+                     ".jmxremote.authenticate=false\"/g'")
+                "'/JVM_OPTS=\"$JVM_OPTS -Dcassandra.mv_disable_coordinator_batchlog=.*\"/d'"]]
      (c/exec :sed :-i (lit rep) "~/cassandra/conf/cassandra-env.sh"))
    (doseq [rep (into ["\"s/cluster_name: .*/cluster_name: 'jepsen'/g\""
                       "\"s/row_cache_size_in_mb: .*/row_cache_size_in_mb: 20/g\""
@@ -192,16 +209,24 @@
                       (str "\"s/broadcast_rpc_address: .*/broadcast_rpc_address: "
                            (net/local-ip) "/g\"")
                       "\"s/internode_compression: .*/internode_compression: none/g\""
+                      (str "\"s/hinted_handoff_enabled:.*/hinted_handoff_enabled: "
+                           (disable-hints?) "/g\"")
                       "\"s/commitlog_sync: .*/commitlog_sync: batch/g\""
                       (str "\"s/# commitlog_sync_batch_window_in_ms: .*/"
                            "commitlog_sync_batch_window_in_ms: 1.0/g\"")
                       "\"s/commitlog_sync_period_in_ms: .*/#/g\""
+                      (str "\"s/# phi_convict_threshold: .*/phi_convict_threshold: " (phi-level)
+                           "/g\"")
                       "\"/auto_bootstrap: .*/d\""]
                      (when (compressed-commitlog?)
                        ["\"s/#commitlog_compression.*/commitlog_compression:/g\""
                         (str "\"s/#   - class_name: LZ4Compressor/"
                              "    - class_name: LZ4Compressor/g\"")]))]
      (c/exec :sed :-i (lit rep) "~/cassandra/conf/cassandra.yaml"))
+   (c/exec :echo (str "JVM_OPTS=\"$JVM_OPTS -Dcassandra.mv_disable_coordinator_batchlog="
+                      (coordinator-batchlog-disabled?) "\"")
+           :>> "~/cassandra/conf/cassandra-env.sh")
+   (c/exec :sed :-i (lit "\"s/INFO/DEBUG/g\"") "~/cassandra/conf/logback.xml")
    (c/exec :echo (str "auto_bootstrap: " (-> test :bootstrap deref node boolean))
            :>> "~/cassandra/conf/cassandra.yaml")))
 
@@ -238,7 +263,7 @@
   (stop! node)
   (info node "deleting data files")
   (c/su
-   (meh (c/exec :rm :-r "~/cassandra/logs/system.log"))
+   (meh (c/exec :rm :-r "~/cassandra/logs"))
    (meh (c/exec :rm :-r "~/cassandra/data/data"))
    (meh (c/exec :rm :-r "~/cassandra/data/hints"))
    (meh (c/exec :rm :-r "~/cassandra/data/commitlog"))

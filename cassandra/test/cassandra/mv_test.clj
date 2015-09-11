@@ -56,3 +56,7 @@
 
 (deftest ^:clock mv-clock-drift-decommission
   (run-test! clock-drift-test-decommission))
+
+;; Consistency delay test
+(deftest consistency-delay
+  (run-test! delay-test))

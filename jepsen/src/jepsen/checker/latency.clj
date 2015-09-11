@@ -169,16 +169,18 @@
 
 (defn point-graph!
   "Writes a plot of raw latency data points."
-  [test history]
-  (let [history     (util/history->latencies history)
-        datasets    (by-f-type history)
-        fs          (sort (keys datasets))
-        fs->points  (fs->points fs)
-        output-path (.getCanonicalPath (store/path! test "latency-raw.png"))]
-    (g/raw-plot!
+  ([test history]
+   (point-graph! test history util/history->latencies))
+  ([test history history->latency-fn]
+   (let [history     (history->latency-fn history)
+         datasets    (by-f-type history)
+         fs          (sort (keys datasets))
+         fs->points  (fs->points fs)
+         output-path (.getCanonicalPath (store/path! test "latency-raw.png"))]
+     (g/raw-plot!
       (concat (preamble output-path)
               (nemesis-regions history)
-              ; Plot ops
+                                        ; Plot ops
               [['plot (apply g/list
                              (for [f fs, t types]
                                ["-"
@@ -190,32 +192,34 @@
       (for [f fs, t types]
         (map point (get-in datasets [f t]))))
 
-    output-path))
+     output-path)))
 
 (defn quantiles-graph!
   "Writes a plot of latency quantiles, by f, over time."
-  [test history]
-  (let [history     (util/history->latencies history)
-        dt          30
-        qs          [0.5 0.95 0.99 1]
-        datasets    (->> history
-                         by-f
-                         ; For each f, emit a map of quantiles to points
-                         (util/map-kv
+  ([test history]
+   (quantiles-graph! test history util/history->latencies))
+  ([test history history->latency-fn]
+   (let [history     (history->latency-fn history)
+         dt          30
+         qs          [0.5 0.95 0.99 1]
+         datasets    (->> history
+                          by-f
+                                        ; For each f, emit a map of quantiles to points
+                          (util/map-kv
                            (fn [[f ops]]
                              (->> ops
                                   (map point)
                                   (latencies->quantiles dt qs)
                                   (vector f)))))
-        fs          (sort (keys datasets))
-        fs->points  (fs->points fs)
-        qs->colors  (qs->colors qs)
-        output-path (.getCanonicalPath
+         fs          (sort (keys datasets))
+         fs->points  (fs->points fs)
+         qs->colors  (qs->colors qs)
+         output-path (.getCanonicalPath
                       (store/path! test "latency-quantiles.png"))]
-    (g/raw-plot!
+     (g/raw-plot!
       (concat (preamble output-path)
               (nemesis-regions history)
-              ; Plot ops
+                                        ; Plot ops
               [['plot (apply g/list
                              (for [f fs, q qs]
                                ["-"
@@ -227,4 +231,4 @@
       (for [f fs, q qs]
         (get-in datasets [f q])))
 
-    output-path))
+     output-path)))

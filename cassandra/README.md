@@ -16,6 +16,9 @@ Some parameters are available for tuning through environment variables.
 - If set, `CASSANDRA_TARBALL_URL` should point to a binary C* tarball available over HTTP or HTTPS.
 - If set, `CASSANDRA_TARBALL_PATH` should point to a binary tarball for the version of C* to be tested. If running the tests inside the container, this path should be a path inside the container, not on the host system. This variable takes precedence over `CASSANDRA_TARBALL_URL` if both are set.
 - Under normal lifecycle, the cluster is torn down at the end of a test. If `LEAVE_CLUSTER_RUNNING` is set to any non-empty value, the cluster will be left running at the end of the test. In addition, the running cluster will be stopped at the start of a test. This option is best used to debug a cluster after a single test.
+- If the environment variable `JEPSEN_DISABLE_COORDINATOR_BATCHLOG` has any value, the coordinator batchlog will be disabled for materialized views.
+- If the environment variable `JEPSEN_PHI_VALUE` is set, this will be provided as the phi value to the failure detector.
+- If the environment variable `JEPSEN_DISABLE_HINTS` is set, hinted handoff will be disabled.
 
 ## Starting the Docker Container
 

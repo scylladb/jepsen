@@ -2,6 +2,7 @@
   (require [clojure.core.reducers :as r]
            [clojure.tools.logging :refer [debug info warn]]
            [jepsen.model :as model]
+           [jepsen.checker.latency :as latency]
            [knossos.core :as knossos])
   (:import jepsen.checker.Checker))
 
@@ -38,7 +39,7 @@
     ; A failure; fill in either value.
     :fail
     (let [i           (get index (:process op))
-          _           (assert i)          
+          _           (assert i)
           invocation  (nth history i)
           value       (or (:value invocation) (:value op))
           [invocation' op'] (if (and (= :cas (:f op)) (number? (:value op)))
@@ -100,3 +101,49 @@
   (reify Checker
     (check [this test model history]
       (enhanced-analysis model history))))
+
+(defn ec-history->latencies
+  [threshold]
+  (fn [history]
+    (->> history
+         (reduce (fn [[history invokes] op]
+                   (cond
+                                        ;New write
+                     (and (= :invoke (:type op)) (= :assoc (:f op)))
+                     [(conj! history op)
+                      (assoc! invokes (:v (:value op))
+                              [(dec (count history)) #{} (:time op)])]
+
+                                        ; Check propagation of writes in this read
+                     (and (= :ok (:type op)) (= :read (:f op)))
+                     (reduce (fn [[history invokes] value]
+                               (if-let [[invoke-idx nodes start-time] (get invokes value)]
+                                        ; We have an invocation for this value
+                                 (cond
+                                   (= (count (conj nodes (:node op))) threshold)
+                                   (let [invoke (get history invoke-idx)
+                                        ; Compute latency
+                                         l    (- (:time op) start-time)
+                                         op (assoc op :latency l)]
+                                     [(-> history
+                                          (assoc! invoke-idx
+                                                  (assoc invoke :latency l, :completion op))
+                                          (conj! op))
+                                      (dissoc! invokes value)])
+
+                                   (= (count nodes) 0)
+                                   [history (assoc! invokes value
+                                                    [invoke-idx (conj nodes (:node op)) (:time op)])]
+
+                                   :default
+                                   [history (assoc! invokes value
+                                                    [invoke-idx (conj nodes (:node op)) start-time])])
+                                 [history invokes]))
+                             [history invokes]
+                             (vals (:value op)))
+                     
+                     :default
+                     [history invokes]))
+                 [(transient []) (transient {})])
+         first
+         persistent!)))

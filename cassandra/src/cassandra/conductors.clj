@@ -4,6 +4,8 @@
             [clojure.tools.logging :refer :all]
             [jepsen [client :as client]
              [control :as c]
+             [nemesis :as nemesis]
+             [net :as net]
              [util :as util :refer [meh]]]))
 
 (defn bootstrapper
@@ -64,3 +66,24 @@
                    (assoc op :value (str (:nodes test) " nodes flushed and compacted")))
         :stop (assoc op :value "stop is a no-op with this nemesis")))
     (teardown! [this test] this)))
+
+(defn flexible-partitioner
+  "Responds to a :start operation by cutting network links as defined by
+  (grudge nodes), and responds to :stop by healing the network. Uses
+  :grudge entry in op to determine grudge function used."
+  [grudge-map]
+  (reify client/Client
+    (setup! [this test _]
+      (net/heal! (:net test) test)
+      this)
+
+    (invoke! [this test op]
+      (case (:f op)
+        :start (let [grudge ((-> op :grudge grudge-map) (:nodes test))]
+                 (nemesis/partition! test grudge)
+                 (assoc op :value (str "Cut off " (pr-str grudge))))
+        :stop  (do (net/heal! (:net test) test)
+                   (assoc op :value "fully connected"))))
+
+    (teardown! [this test]
+      (net/heal! (:net test) test))))

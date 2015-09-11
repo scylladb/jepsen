@@ -308,11 +308,18 @@
                          (into {}))]
         (assoc results :valid? (every? :valid? (vals results)))))))
 
-(defn latency-graph
-  "Spits out graphs of latency to store/.../latency.png."
-  []
+(defn latency-graph-no-quantiles
+  [history->latency-fn]
   (reify Checker
     (check [_ test model history]
-      (latency/point-graph! test history)
-      (latency/quantiles-graph! test history)
+      (latency/point-graph! test history history->latency-fn)
+      {:valid? true})))
+
+(defn latency-graph
+  "Spits out graphs of latency to store/.../latency.png."
+  [history->latency-fn]
+  (reify Checker
+    (check [_ test model history]
+      (latency/point-graph! test history history->latency-fn)
+      (latency/quantiles-graph! test history history->latency-fn)
       {:valid? true})))
