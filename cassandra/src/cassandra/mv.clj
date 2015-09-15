@@ -43,7 +43,7 @@
   client/Client
   (setup! [_ test node]
     (locking setup-lock
-      (let [conn1 (cassandra/connect [(name node)]
+      (let [conn (cassandra/connect [(name node)]
                                     {:load-balancing-policy
                                      (WhiteListPolicy.
                                       (RoundRobinPolicy.)
