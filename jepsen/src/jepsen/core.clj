@@ -33,7 +33,8 @@
   "A synchronization primitive for tests. When invoked, blocks until all
   nodes have arrived at the same point."
   [test]
-  (.await ^CyclicBarrier (:barrier test)))
+  (or (= ::no-barrier (:barrier test))
+      (.await ^CyclicBarrier (:barrier test))))
 
 (defn conj-op!
   "Add an operation to a tests's history, and returns the operation."
@@ -132,46 +133,46 @@
               (conj-op! test op)
 
               (recur
-               (try
-                                        ; Evaluate operation
-                 (let [completion (-> (client/invoke! client test op)
-                                      (assoc :time (relative-time-nanos)))]
-                   (util/log-op completion)
+                (try
+                  ; Evaluate operation
+                  (let [completion (-> (client/invoke! client test op)
+                                       (assoc :time (relative-time-nanos)))]
+                    (util/log-op completion)
 
-                                        ; Sanity check
-                   (assert (= (:process op) (:process completion)))
-                   (assert (= (:f op)       (:f completion)))
+                    ; Sanity check
+                    (assert (= (:process op) (:process completion)))
+                    (assert (= (:f op)       (:f completion)))
 
-                                        ; Log completion
-                   (conj-op! test completion)
+                    ; Log completion
+                    (conj-op! test completion)
 
-                   (if (or (knossos/ok? completion) (knossos/fail? completion))
-                                        ; The process is now free to attempt another execution.
-                     process
-                                        ; Process hung; move on
-                     (+ process (count (:nodes test)))))
+                    (if (or (knossos/ok? completion) (knossos/fail? completion))
+                      ; The process is now free to attempt another execution.
+                      process
+                      ; Process hung; move on
+                      (+ process (:concurrency test))))
 
-                 (catch Throwable t
-                                        ; At this point all bets are off. If the client or network
-                                        ; or DB crashed before doing anything; this operation won't
-                                        ; be a part of the history. On the other hand, the DB may
-                                        ; have applied this operation and we *don't know* about it;
-                                        ; e.g.  because of timeout.
-                                        ;
-                                        ; This process is effectively hung; it can not initiate a
-                                        ; new operation without violating the single-threaded
-                                        ; process constraint. We cycle to a new process identifier,
-                                        ; and leave the invocation uncompleted in the history.
-                   (conj-op! test (assoc op
-                                         :type :info
-                                         :time  (relative-time-nanos)
-                                         :value (str "indeterminate: "
-                                                     (if (.getCause t)
-                                                       (.. t getCause
-                                                           getMessage)
-                                                       (.getMessage t)))))
-                   (warn t "Process" process "indeterminate")
-                   (+ process (count (:nodes test)))))))))
+                  (catch Throwable t
+                    ; At this point all bets are off. If the client or network
+                    ; or DB crashed before doing anything; this operation won't
+                    ; be a part of the history. On the other hand, the DB may
+                    ; have applied this operation and we *don't know* about it;
+                    ; e.g.  because of timeout.
+                    ;
+                    ; This process is effectively hung; it can not initiate a
+                    ; new operation without violating the single-threaded
+                    ; process constraint. We cycle to a new process identifier,
+                    ; and leave the invocation uncompleted in the history.
+                    (conj-op! test (assoc op
+                                          :type :info
+                                          :time  (relative-time-nanos)
+                                          :value (str "indeterminate: "
+                                                      (if (.getCause t)
+                                                        (.. t getCause
+                                                            getMessage)
+                                                        (.getMessage t)))))
+                    (warn t "Process" process "indeterminate")
+                    (+ process (:concurrency test))))))))
         (info "Worker" process "done")))))
 
 (defn conductor-worker
@@ -282,7 +283,14 @@
     (with-resources [clients
                      #(client/setup! (:client test) test %) ; Specialize to node
                      #(client/teardown! % test)
-                     (:nodes test)]
+                     (if (empty? (:nodes test))
+                       ; If you've specified an empty node set, we'll still
+                       ; give you `concurrency` clients, with nil.
+                       (repeat (:concurrency test) nil)
+                       (->> test
+                          :nodes
+                          cycle
+                          (take (:concurrency test))))]
 
                                         ; Begin workload
       (let [workers (mapv (partial worker test)
@@ -304,18 +312,21 @@
   "Logs info about the results of a test to stdout, and returns test."
   [test]
   (info (str
-         (if (:valid? (:results test))
-           "Everything looks good! ヽ(‘ー`)ノ"
-           "Analysis invalid! (ﾉಥ益ಥ）ﾉ ┻━┻")
-         "\n\n"
-         (with-out-str
-           (pprint (:results test)))))
+          (if (:valid? (:results test))
+            "Everything looks good! ヽ(‘ー`)ノ"
+            "Analysis invalid! (ﾉಥ益ಥ）ﾉ ┻━┻")
+          "\n\n"
+          (with-out-str
+            (pprint (:results test)))
+          (when (:error (:results test))
+            (str "\n\n" (:error (:results test))))))
   test)
 
 (defn run!
   "Runs a test. Tests are maps containing
 
-  :nodes      A sequence of string node names involved in the test.
+  :nodes      A sequence of string node names involved in the test
+  :concurrency  (optional) How many processes to run concurrently
   :ssh        SSH credential information: a map containing...
     :username           The username to connect with   (root)
     :password           The password to use
@@ -360,54 +371,64 @@
      the history
     - This generates the final report"
   [test]
-  (log-results (with-thread-name "jepsen test runner"
-                 (let [test (assoc test
-                                        ; Initialization time
-                                   :start-time (util/local-time)
+  (log-results
+    (with-thread-name "jepsen test runner"
+      (let [test (assoc test
+                        ; Initialization time
+                        :start-time (util/local-time)
 
-                                        ; Synchronization point for nodes
-                                   :barrier (CyclicBarrier. (count (:nodes test)))
-                                        ; Currently running histories
-                                   :active-histories (atom #{}))]
+                        ; Number of concurrent workers
+                        :concurrency (or (:concurrency test)
+                                         (count (:nodes test)))
 
-                                        ; Open SSH conns
-                   (control/with-ssh (:ssh test)
-                     (with-resources [sessions (bound-fn* control/session) control/disconnect
-                                      (:nodes test)]
+                        ; Synchronization point for nodes
+                        :barrier (let [c (count (:nodes test))]
+                                   (if (pos? c)
+                                     (CyclicBarrier. (count (:nodes test)))
+                                     ::no-barrier))
+                        ; Currently running histories
+                        :active-histories (atom #{}))]
 
-                                        ; Index sessions by node name and add to test
-                       (let [test (->> sessions
-                                       (map vector (:nodes test))
-                                       (into {})
-                                       (assoc test :sessions))]
+        ; Open SSH conns
+        (control/with-ssh (:ssh test)
+          (with-resources [sessions
+                           (bound-fn* control/session)
+                           control/disconnect
+                           (:nodes test)]
 
-                                        ; Setup
-                         (with-os test
-                           (with-db test
-                             (binding [generator/*threads*
-                                       (into (-> test :conductors keys)
-                                             (range (count (:nodes test))))]
-                               (util/with-relative-time
-                                 (with-conductors test
-                                        ; Run a single case
-                                   (let [test (assoc test :history (run-case! test))
-                                        ; Remove state
-                                         test (dissoc test
-                                                      :barrier
-                                                      :active-histories
-                                                      :sessions)]
+            ; Index sessions by node name and add to test
+            (let [test (->> sessions
+                            (map vector (:nodes test))
+                            (into {})
+                            (assoc test :sessions))]
 
-                                     (info "Run complete, writing")
+              ; Setup
+              (with-os test
+                (with-db test
+                  (binding [generator/*threads*
+                            ; TODO: handle old style of just one nemesis
+                            (into (-> test :conductors keys)
+                                  (range (:concurrency test)))]
+                    (util/with-relative-time
+                      (with-conductors test
+                        ; Run a single case
+                        (let [test (assoc test :history (run-case! test))
+                              ; Remove state
+                              test (dissoc test
+                                           :barrier
+                                           :active-histories
+                                           :sessions)]
 
-                                     (when (:name test) (store/save! test))
+                          (info "Run complete, writing")
+                          (when (:name test) (store/save! test))
 
-                                     (info "Analyzing")
-                                     (let [test (assoc test :results (checker/check-safe
-                                                                      (:checker test)
-                                                                      test
-                                                                      (:model test)
-                                                                      (:history test)))]
+                          (info "Analyzing")
+                          (let [test (assoc test :results (checker/check-safe
+                                                            (:checker test)
+                                                            test
+                                                            (:model test)
+                                                            (:history test)))]
 
-                                       (info "Analysis complete")
-                                       (when (:name test) (store/save! test))
-                                       test))))))))))))))
+                            (info "Analysis complete")
+                            (when (:name test) (store/save! test))
+                          test))))))))))))))

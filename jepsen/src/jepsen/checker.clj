@@ -8,7 +8,7 @@
             [clojure.java.io :as io]
             [jepsen.util :as util]
             [jepsen.store :as store]
-            [jepsen.checker.latency :as latency]
+            [jepsen.checker.perf :as perf]
             [multiset.core :as multiset]
             [gnuplot.core :as g]
             [knossos.core :as knossos]
@@ -234,7 +234,7 @@
 
   When testing Cassandra, we know a :fail increment did not occur, so we should
   decrement the counter by the appropriate amount.
-  
+
   Returns a map:
 
   {:valid?              Whether the counter remained within bounds
@@ -308,18 +308,25 @@
                          (into {}))]
         (assoc results :valid? (every? :valid? (vals results)))))))
 
-(defn latency-graph-no-quantiles
-  [history->latency-fn]
+(defn latency-graph
+  "Spits out graphs of latencies."
+  []
   (reify Checker
     (check [_ test model history]
-      (latency/point-graph! test history history->latency-fn)
+      (perf/point-graph! test history)
+      (perf/quantiles-graph! test history)
       {:valid? true})))
 
-(defn latency-graph
-  "Spits out graphs of latency to store/.../latency.png."
-  [history->latency-fn]
+(defn rate-graph
+  "Spits out graphs of throughput over time."
+  []
   (reify Checker
     (check [_ test model history]
-      (latency/point-graph! test history history->latency-fn)
-      (latency/quantiles-graph! test history history->latency-fn)
+      (perf/rate-graph! test history)
       {:valid? true})))
+
+(defn perf
+  "Assorted performance statistics"
+  []
+  (compose {:latency-graph (latency-graph)
+            :rate-graph    (rate-graph)}))

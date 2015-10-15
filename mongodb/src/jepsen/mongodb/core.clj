@@ -25,7 +25,7 @@
             [monger.collection :as mc]
             [monger.result :as mr]
             [monger.query :as mq]
-            [monger.command]
+            [monger.command :as command]
             [monger.operators :refer :all]
             [monger.conversion :refer [from-db-object]])
   (:import (clojure.lang ExceptionInfo)
@@ -36,31 +36,41 @@
                         WriteConcern
                         ReadPreference)))
 
+(defn apt-install!
+  "Does the apt-get install for a version"
+  [version]
+  (c/su
+    (debian/install {:mongodb-org version
+                     :mongodb-org-server version
+                     :mongodb-org-shell version
+                     :mongodb-org-mongos version
+                     :mongodb-org-tools version})))
+
 (defn install!
   "Installs the given version of MongoDB."
   [node version]
-  (when-not (debian/installed? "mongodb-org")
-    (c/su
-      (try
-        (info node "installing mongodb")
-        (debian/install {:mongodb-org version})
+  (c/su
+    (try
+      (apt-install! version)
 
-        (catch RuntimeException e
-          ; Add apt key
-          (c/exec :apt-key     :adv
-                  :--keyserver "keyserver.ubuntu.com"
-                  :--recv      "7F0CEB10")
+      (catch RuntimeException e
+        ; Add apt key
+        (c/exec :apt-key     :adv
+                :--keyserver "keyserver.ubuntu.com"
+                :--recv      "7F0CEB10")
 
-          ; Add repo
-          (c/exec :echo "deb http://downloads-distro.mongodb.org/repo/debian-sysvinit dist 10gen"
-                  :> "/etc/apt/sources.list.d/mongodb.list")
-          (c/exec :apt-get :update)
+        ; Add repos
+        (c/exec :echo "deb http://downloads-distro.mongodb.org/repo/debian-sysvinit dist 10gen"
+                :> "/etc/apt/sources.list.d/mongodb.list")
+        (c/exec :echo "deb http://repo.mongodb.org/apt/debian wheezy/mongodb-org/3.0 main"
+                :> "/etc/apt/sources.list.d/mongodb-3.0.list")
+        (c/exec :apt-get :update)
 
-          ; Try install again
-          (debian/install {:mongodb-org version})
+        ; Try install again
+        (apt-install! version)))
 
-      ; Make sure we don't start at startup
-      (c/exec :update-rc.d :mongod :remove :-f))))))
+    ; Make sure we don't start at startup
+    (c/exec :update-rc.d :mongod :remove :-f)))
 
 (defn configure!
   "Deploy configuration files to the node."
@@ -79,8 +89,9 @@
   [node]
   (info node "stopping mongod")
   (c/su
-    (c/exec :service :mongod :stop))
-    (meh (c/exec :killall :-9 :mongod)))
+    (timeout 5000 nil
+      (c/exec :service :mongod :stop))
+    (meh (c/exec :killall :-9 :mongod))))
 
 (defn wipe!
   "Shuts down MongoDB and wipes data."
@@ -88,6 +99,7 @@
   (stop! node)
   (info node "deleting data files")
   (c/su
+    (c/exec :rm :-rf (c/lit "/var/log/mongodb/*"))
     (c/exec :rm :-rf (c/lit "/var/lib/mongodb/*"))))
 
 (defn uninstall!
@@ -180,11 +192,6 @@
   [conn conf]
   (admin-command! conn :replSetReconfig conf))
 
-(defn optime
-  "The current optime"
-  [conn]
-  (admin-command! conn :getoptime 1))
-
 (defn node+port->node
   "Take a mongo \"n1:27107\" string and return just the node as a keyword:
   :n1."
@@ -225,7 +232,7 @@
   "Block until we can connect to the given node. Returns a connection to the
   node."
   [node]
-  (timeout 45000
+  (timeout (* 100 1000)
            (throw (ex-info "Timed out trying to connect to MongoDB"
                            {:node node}))
            (loop []
@@ -233,7 +240,7 @@
                    (let [conn (mongo/connect (mongo/server-address (name node))
                                              mongo-conn-opts)]
                      (try
-                       (optime conn)
+                       (command/top conn)
                        conn
                        (catch Throwable t
                          (mongo/disconnect conn)
@@ -280,7 +287,7 @@
 (defn join!
   "Join nodes into a replica set. Blocks until any primary is visible to all
   nodes which isn't really what we want but oh well."
-  [test node]
+  [node test]
   ; Gotta have all nodes online for this
   (jepsen/synchronize test)
 
@@ -319,19 +326,19 @@
     (info node "primary is" (primary conn))
     (jepsen/synchronize test)))
 
-(defn db [version]
+(defn db
   "MongoDB for a particular version."
+  [version]
   (reify db/DB
     (setup! [_ test node]
       (doto node
         (install! version)
         (configure!)
-        (start!))
-      (join! test node))
+        (start!)
+        (join! test)))
 
     (teardown! [_ test node]
       (wipe! node))))
-;      )))
 
 (defn cluster-client
   "Returns a mongoDB connection for all nodes in a test."
@@ -403,7 +410,7 @@
     (assoc tests/noop-test
            :name      (str "mongodb " name)
            :os        debian/os
-           :db        (db "2.6.7")
+           :db        (db "3.0.4")
            :model     (model/cas-register)
            :checker   (checker/compose {:linear checker/linearizable
                                         :latency (checker/latency-graph)})

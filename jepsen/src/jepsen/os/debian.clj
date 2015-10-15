@@ -5,6 +5,7 @@
             [jepsen.util :refer [meh]]
             [jepsen.os :as os]
             [jepsen.control :as c]
+            [jepsen.control.util :as cu]
             [jepsen.control.net :as net]
             [clojure.string :as str]))
 
@@ -59,7 +60,7 @@
   [pkg-or-pkgs]
   (let [pkgs (if (coll? pkg-or-pkgs) pkg-or-pkgs (list pkg-or-pkgs))
         pkgs (installed pkgs)]
-    (c/su (apply c/exec :apt-get :remove :-y pkgs))))
+    (c/su (apply c/exec :apt-get :remove :--purge :-y pkgs))))
 
 (defn installed?
   "Are the given debian packages, or singular package, installed on the current
@@ -86,14 +87,38 @@
     (dorun
       (for [[pkg version] pkgs]
         (when (not= version (installed-version pkg))
-          (c/exec :apt-get :install :-y (str (name pkg) "=" version)))))
+          (info "Installing" pkg version)
+          (c/exec :apt-get :install :-y :--force-yes
+                  (str (name pkg) "=" version)))))
 
     ; Install any version
     (let [pkgs    (set (map name pkgs))
           missing (set/difference pkgs (installed pkgs))]
       (when-not (empty? missing)
         (c/su
+          (info "Installing" missing)
           (apply c/exec :apt-get :install :-y missing))))))
+
+(defn add-key!
+  "Receives an apt key from the given keyserver."
+  [keyserver key]
+  (c/su
+    (c/exec :apt-key :adv
+            :--keyserver keyserver
+            :--recv key)))
+
+(defn add-repo!
+  "Adds an apt repo (and optionally a key from the given keyserver)."
+  ([repo-name apt-line]
+   (add-repo! repo-name apt-line nil nil))
+  ([repo-name apt-line keyserver key]
+   (let [list-file (str "/etc/apt/sources.list.d/" (name repo-name) ".list")]
+     (when-not (cu/file? list-file)
+       (info "setting up" repo-name "apt repo")
+       (when (or keyserver key)
+         (add-key! keyserver key))
+       (c/exec :echo apt-line :> list-file)
+       (update!)))))
 
 (def os
   (reify os/OS
@@ -112,11 +137,12 @@
                   :sysvinit-utils
                   :curl
                   :vim
-                  :man
+                  :man-db
                   :faketime
                   :unzip
                   :iptables
                   :iputils-ping
+                  :rsyslog
                   :logrotate])
 
         ; Fucking systemd breaks a bunch of packages
