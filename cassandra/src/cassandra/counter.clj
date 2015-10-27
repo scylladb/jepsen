@@ -56,16 +56,15 @@
                                                :primary-key [:id]})
                           (with {:compaction
                                  {:class (compaction-strategy)}}))
-        (cql/update conn {:enable-tracing false} "counters" {:count (increment-by 0)}
+        (cql/update conn "counters" {:count (increment-by 0)}
                     (where [[= :id 0]]))
-        (info "Speculative executions" (.getCount (.getSpeculativeExecutions (.getErrorMetrics (.getMetrics (.getCluster conn))))))
         (->CQLCounterClient conn writec))))
   (invoke! [this test op]
     (case (:f op)
       :add (try (do
                   (with-retry-policy FallthroughRetryPolicy/INSTANCE
                     (with-consistency-level writec
-                      (cql/update conn {:enable-tracing true}
+                      (cql/update conn
                                   "counters"
                                   {:count (increment-by (:value op))}
                                   (where [[= :id 0]]))))
@@ -80,7 +79,7 @@
                   (assoc op :type :fail :error (.getMessage e))))
       :read (try (let [value (->> (with-retry-policy FallthroughRetryPolicy/INSTANCE
                                     (with-consistency-level ConsistencyLevel/ALL
-                                      (cql/select conn {:enable-tracing true}
+                                      (cql/select conn
                                                   "counters"
                                                   (where [[= :id 0]]))))
                                   first
@@ -97,8 +96,6 @@
                    (assoc op :type :fail :error (.getMessage e))))))
   (teardown! [_ _]
     (info "Tearing down client with conn" conn)
-    (info "Speculative executions" (.getCount (.getSpeculativeExecutions (.getErrorMetrics (.getMetrics (.getCluster conn))))))
-    (info "Total" (.getCount (.getRequestsTimer (.getMetrics (.getCluster conn)))))
     (cassandra/disconnect! conn)))
 
 (defn cql-counter-client

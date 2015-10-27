@@ -43,7 +43,7 @@
   client/Client
   (setup! [_ test node]
     (locking setup-lock
-      (let [conn (cassandra/connect [(name node)]
+      (let [conn (cassandra/connect (->> test :nodes (map name))
                                     {:load-balancing-policy
                                      (WhiteListPolicy.
                                       (RoundRobinPolicy.)
@@ -113,7 +113,7 @@
 (defn mv-map-client
   "A map implemented using MV"
   ([]
-   (->MVMapClient nil :single ConsistencyLevel/ALL))
+   (->MVMapClient nil :all ConsistencyLevel/ALL))
   ([load-balancing-policy]
    (->MVMapClient nil load-balancing-policy ConsistencyLevel/ALL))
   ([load-balancing-policy read-cl]
