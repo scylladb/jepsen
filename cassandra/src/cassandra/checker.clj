@@ -2,7 +2,7 @@
   (require [clojure.core.reducers :as r]
            [clojure.tools.logging :refer [debug info warn]]
            [jepsen.model :as model]
-           [jepsen.checker.latency :as latency]
+           [jepsen.checker.perf :as latency]
            [knossos.core :as knossos])
   (:import jepsen.checker.Checker))
 
@@ -141,7 +141,7 @@
                                  [history invokes]))
                              [history invokes]
                              (vals (:value op)))
-                     
+
                      :default
                      [history invokes]))
                  [(transient []) (transient {})])

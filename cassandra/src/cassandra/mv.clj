@@ -223,37 +223,37 @@
   (comp nemesis/complete-grudge (partial map vector)))
 
 ;; EC convergence test
-(def delay-test
-  (cassandra-test (str "consistency delay")
-                  {:client (consistency-delay-client)
-                   :generator (gen/phases
-                               (gen/nemesis (gen/once {:type :info :f :start :grudge :pair}))
-                               (gen/sleep 25)
-                               (->> (gen/clients (assocs identity))
-                                    (gen/time-limit 200))
-                               (gen/nemesis (gen/once {:type :info :f :stop}))
-                               (->> (fn [] [
-                                            (gen/delay 3 (gen/nemesis (gen/once {:type :info :f :start
-                                                                                 :grudge :complete})))
-                                            (gen/concat (gen/on (partial = 0)
-                                                                (gen/once {:type :invoke :f :read}))
-                                                        (gen/on (partial = 1)
-                                                                (gen/once {:type :invoke :f :read}))
-                                                        (gen/on (partial = 2)
-                                                                (gen/once {:type :invoke :f :read}))
-                                                        (gen/on (partial = 3)
-                                                                (gen/once {:type :invoke :f :read}))
-                                                        (gen/on (partial = 4)
-                                                                (gen/once {:type :invoke :f :read})))
-                                            (gen/nemesis (gen/once {:type :info :f :stop}))])
-                                    (repeatedly 7)
-                                    (apply concat)
-                                    (apply gen/phases)))
-                   :conductors {:nemesis (conductors/flexible-partitioner {:pair paired-nodes
-                                                                           :complete isolate-all})}
-                   :checker (checker/compose
-                             {:map (checker/latency-graph-no-quantiles
-                                    (extra-checker/ec-history->latencies 3))})}))
+(comment (def delay-test
+           (cassandra-test (str "consistency delay")
+                           {:client (consistency-delay-client)
+                            :generator (gen/phases
+                                        (gen/nemesis (gen/once {:type :info :f :start :grudge :pair}))
+                                        (gen/sleep 25)
+                                        (->> (gen/clients (assocs identity))
+                                             (gen/time-limit 200))
+                                        (gen/nemesis (gen/once {:type :info :f :stop}))
+                                        (->> (fn [] [
+                                                     (gen/delay 3 (gen/nemesis (gen/once {:type :info :f :start
+                                                                                          :grudge :complete})))
+                                                     (gen/concat (gen/on (partial = 0)
+                                                                         (gen/once {:type :invoke :f :read}))
+                                                                 (gen/on (partial = 1)
+                                                                         (gen/once {:type :invoke :f :read}))
+                                                                 (gen/on (partial = 2)
+                                                                         (gen/once {:type :invoke :f :read}))
+                                                                 (gen/on (partial = 3)
+                                                                         (gen/once {:type :invoke :f :read}))
+                                                                 (gen/on (partial = 4)
+                                                                         (gen/once {:type :invoke :f :read})))
+                                                     (gen/nemesis (gen/once {:type :info :f :stop}))])
+                                             (repeatedly 7)
+                                             (apply concat)
+                                             (apply gen/phases)))
+                            :conductors {:nemesis (conductors/flexible-partitioner {:pair paired-nodes
+                                                                                    :complete isolate-all})}
+                            :checker (checker/compose
+                                      {:map (checker/latency-graph-no-quantiles
+                                             (extra-checker/ec-history->latencies 3))})})))
 
 ;; Uncontended tests
 (def bridge-test

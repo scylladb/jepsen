@@ -58,5 +58,5 @@
   (run-test! clock-drift-test-decommission))
 
 ;; Consistency delay test
-(deftest consistency-delay
-  (run-test! delay-test))
+(comment (deftest consistency-delay
+           (run-test! delay-test)))
