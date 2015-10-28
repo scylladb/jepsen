@@ -32,17 +32,13 @@
                                                 WriteTimeoutException
                                                 ReadTimeoutException
                                                 NoHostAvailableException)
-           (com.datastax.driver.core.policies FallthroughRetryPolicy
-                                              ConstantSpeculativeExecutionPolicy)))
+           (com.datastax.driver.core.policies FallthroughRetryPolicy)))
 
 (defrecord CQLCounterClient [conn writec]
   client/Client
   (setup! [_ test node]
     (locking setup-lock
-      (let [conn (cassandra/connect
-                  (->> test :nodes (map name))
-                  ;{:speculative-execution-policy (ConstantSpeculativeExecutionPolicy. 100000000 1)}
-                  )]
+      (let [conn (cassandra/connect (->> test :nodes (map name)))]
         (cql/create-keyspace conn "jepsen_keyspace"
                              (if-not-exists)
                              (with {:replication
