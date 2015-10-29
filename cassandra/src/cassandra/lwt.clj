@@ -133,7 +133,7 @@
                                       (->> [r w cas cas cas]
                                            gen/mix
                                            (gen/stagger 1/10)
-                                           (gen/delay 1)
+                                           (gen/delay 1.5)
                                            (gen/nemesis
                                             (gen/seq (cycle
                                                       [(gen/sleep 5)
