@@ -170,7 +170,9 @@
      "deb  http://s3.amazonaws.com/downloads.scylladb.com/deb/ubuntu trusty/scylladb multiverse"
      :>"/etc/apt/sources.list.d/scylla.list")
     (c/exec 
-     :apt-get install scylla-server scylla-jmx scylla-tools)
+     :apt-get :update)
+    (c/exec
+     :apt-get :install :-y :--force-yes :scylla-server :scylla-jmx :scylla-tools)
     (c/exec
      :cp :-f "/var/lib/scylla/conf/scylla.yaml" "/var/lib/scylla/conf/scylla.yaml.orig")))
 
