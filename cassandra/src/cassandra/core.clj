@@ -148,58 +148,47 @@
   "Installs Cassandra on the given node."
   [node version]
   (c/su
-   (c/cd
-    "/tmp"
-    (let [tpath (System/getenv "CASSANDRA_TARBALL_PATH")
-          url (or tpath
-                  (System/getenv "CASSANDRA_TARBALL_URL")
-                  (str "http://www.us.apache.org/dist/cassandra/" version
-                       "/apache-cassandra-" version "-bin.tar.gz"))]
-      (info node "installing Cassandra from" url)
-      (if (cached-install? url)
-        (info "Used cached install on node" node)
-        (do (if tpath
-              (c/upload tpath "/tmp/cassandra.tar.gz")
-              (c/exec :wget :-O "cassandra.tar.gz" url (lit ";")))
-            (c/exec :tar :xzvf "cassandra.tar.gz" :-C "~")
-            (c/exec :rm :-r :-f (lit "~/cassandra"))
-            (c/exec :mv (lit "~/apache* ~/cassandra"))
-            (c/exec :echo url :> (lit ".download")))))
+;   (c/cd
+;    "/tmp"
+;    (let [tpath (System/getenv "CASSANDRA_TARBALL_PATH")]
+;          url (or tpath
+;                  (System/getenv "CASSANDRA_TARBALL_URL")
+;                  (str "http://www.us.apache.org/dist/cassandra/" version
+;                       "/apache-cassandra-" version "-bin.tar.gz"))]
+;      (info node "installing ScyllaDB from" tpath)
+;       (if (cached-install? url)
+;        (info "Used cached install on node" node)
+;        (do (if tpath
+;              (c/upload tpath "/tmp/scylladb.tar.gz")
+;              (c/exec :wget :-O "cassandra.tar.gz" url (lit ";")))
+;            (c/exec :tar :xzvf "scylladb.tar.gz" :-C "~")
+;            (c/exec :rm :-r :-f (lit "~/scylladb"))
+;            (c/exec :mv (lit "~/apache* ~/cassandra"))
+;            (c/exec :echo url :> (lit ".download"))))
     (c/exec
      :echo
-     "deb http://ppa.launchpad.net/webupd8team/java/ubuntu trusty main"
-     :>"/etc/apt/sources.list.d/webupd8team-java.list")
-    (c/exec
-     :echo
-     "deb-src http://ppa.launchpad.net/webupd8team/java/ubuntu trusty main"
-     :>> "/etc/apt/sources.list.d/webupd8team-java.list")
-    (try (c/exec :apt-key :adv :--keyserver "hkp://keyserver.ubuntu.com:80"
-                :--recv-keys "EEA14886")
-         (debian/update!)
-         (catch RuntimeException e
-           (info "Error updating caused by" e)))
-    (c/exec :echo
-            "debconf shared/accepted-oracle-license-v1-1 select true"
-            | :debconf-set-selections)
-    (debian/install [:oracle-java8-installer]))))
+     "deb  http://s3.amazonaws.com/downloads.scylladb.com/deb/ubuntu trusty/scylladb multiverse"
+     :>"/etc/apt/sources.list.d/scylla.list")
+    (c/exec 
+     :apt-get install scylla-server scylla-jmx scylla-tools)))
 
 (defn configure!
   "Uploads configuration files to the given node."
   [node test]
   (info node "configuring Cassandra")
   (c/su
-   (doseq [rep ["\"s/#MAX_HEAP_SIZE=.*/MAX_HEAP_SIZE='512M'/g\""
-                "\"s/#HEAP_NEWSIZE=.*/HEAP_NEWSIZE='128M'/g\""
-                "\"s/LOCAL_JMX=yes/LOCAL_JMX=no/g\""
-                (str "'s/# JVM_OPTS=\"$JVM_OPTS -Djava.rmi.server.hostname="
-                     "<public name>\"/JVM_OPTS=\"$JVM_OPTS -Djava.rmi.server.hostname="
-                     (name node) "\"/g'"
-                     )
-                (str "'s/JVM_OPTS=\"$JVM_OPTS -Dcom.sun.management.jmxremote"
-                     ".authenticate=true\"/JVM_OPTS=\"$JVM_OPTS -Dcom.sun.management"
-                     ".jmxremote.authenticate=false\"/g'")
-                "'/JVM_OPTS=\"$JVM_OPTS -Dcassandra.mv_disable_coordinator_batchlog=.*\"/d'"]]
-     (c/exec :sed :-i (lit rep) "~/cassandra/conf/cassandra-env.sh"))
+;   (doseq [rep ["\"s/#MAX_HEAP_SIZE=.*/MAX_HEAP_SIZE='512M'/g\""
+;                "\"s/#HEAP_NEWSIZE=.*/HEAP_NEWSIZE='128M'/g\""
+;                "\"s/LOCAL_JMX=yes/LOCAL_JMX=no/g\""
+;                (str "'s/# JVM_OPTS=\"$JVM_OPTS -Djava.rmi.server.hostname="
+;                     "<public name>\"/JVM_OPTS=\"$JVM_OPTS -Djava.rmi.server.hostname="
+;                     (name node) "\"/g'"
+;                     )
+;                (str "'s/JVM_OPTS=\"$JVM_OPTS -Dcom.sun.management.jmxremote"
+;                     ".authenticate=true\"/JVM_OPTS=\"$JVM_OPTS -Dcom.sun.management"
+;                     ".jmxremote.authenticate=false\"/g'")
+;                "'/JVM_OPTS=\"$JVM_OPTS -Dcassandra.mv_disable_coordinator_batchlog=.*\"/d'"]]
+;     (c/exec :sed :-i (lit rep) "~/cassandra/conf/cassandra-env.sh"))
    (doseq [rep (into ["\"s/cluster_name: .*/cluster_name: 'jepsen'/g\""
                       "\"s/row_cache_size_in_mb: .*/row_cache_size_in_mb: 20/g\""
                       "\"s/seeds: .*/seeds: 'n1,n2'/g\""
@@ -223,9 +212,9 @@
                         (str "\"s/#   - class_name: LZ4Compressor/"
                              "    - class_name: LZ4Compressor/g\"")]))]
      (c/exec :sed :-i (lit rep) "~/cassandra/conf/cassandra.yaml"))
-   (c/exec :echo (str "JVM_OPTS=\"$JVM_OPTS -Dcassandra.mv_disable_coordinator_batchlog="
-                      (coordinator-batchlog-disabled?) "\"")
-           :>> "~/cassandra/conf/cassandra-env.sh")
+;   (c/exec :echo (str "JVM_OPTS=\"$JVM_OPTS -Dcassandra.mv_disable_coordinator_batchlog="
+;                      (coordinator-batchlog-disabled?) "\"")
+;           :>> "~/cassandra/conf/cassandra-env.sh")
    (c/exec :sed :-i (lit "\"s/INFO/DEBUG/g\"") "~/cassandra/conf/logback.xml")
    (c/exec :echo (str "auto_bootstrap: " (-> test :bootstrap deref node boolean))
            :>> "~/cassandra/conf/cassandra.yaml")))
