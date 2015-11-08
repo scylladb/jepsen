@@ -207,7 +207,7 @@
      (c/exec :sed :-i (lit rep) "/var/lib/scylla/conf/scylla.yaml"))
 ;   (c/exec :sed :-i (lit "\"s/INFO/DEBUG/g\"") "~/cassandra/conf/logback.xml")
    (c/exec :echo (str "auto_bootstrap: " (-> test :bootstrap deref node boolean))
-           :>> "/var/lib/scylla/conf/scylla.yaml")))
+           :>> "/var/lib/scylla/conf/scylla.yaml"))))
 
 (defn start!
   "Starts ScyllaDB"
