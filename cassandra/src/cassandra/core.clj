@@ -114,7 +114,7 @@
 (defn nodetool
   "Run a nodetool command"
   [node & args]
-  (c/on node (apply c/exec (lit "~/cassandra/bin/nodetool") args)))
+  (c/on node (apply c/exec (lit "nodetool") args)))
 
 ; This policy should only be used for final reads! It tries to
 ; aggressively get an answer from an unstable cluster after
@@ -145,7 +145,7 @@
        (catch RuntimeException _ false)))
 
 (defn install!
-  "Installs Cassandra on the given node."
+  "Installs ScyllaDB on the given node."
   [node version]
   (c/su
 ;   (c/cd
@@ -170,25 +170,16 @@
      "deb  http://s3.amazonaws.com/downloads.scylladb.com/deb/ubuntu trusty/scylladb multiverse"
      :>"/etc/apt/sources.list.d/scylla.list")
     (c/exec 
-     :apt-get install scylla-server scylla-jmx scylla-tools)))
+     :apt-get install scylla-server scylla-jmx scylla-tools)
+    (c/exec
+     :cp :-f "/var/lib/scylla/conf/scylla.yaml" "/var/lib/scylla/conf/scylla.yaml.orig")))
 
 (defn configure!
   "Uploads configuration files to the given node."
   [node test]
-  (info node "configuring Cassandra")
+  (info node "configuring ScyllaDB")
   (c/su
-;   (doseq [rep ["\"s/#MAX_HEAP_SIZE=.*/MAX_HEAP_SIZE='512M'/g\""
-;                "\"s/#HEAP_NEWSIZE=.*/HEAP_NEWSIZE='128M'/g\""
-;                "\"s/LOCAL_JMX=yes/LOCAL_JMX=no/g\""
-;                (str "'s/# JVM_OPTS=\"$JVM_OPTS -Djava.rmi.server.hostname="
-;                     "<public name>\"/JVM_OPTS=\"$JVM_OPTS -Djava.rmi.server.hostname="
-;                     (name node) "\"/g'"
-;                     )
-;                (str "'s/JVM_OPTS=\"$JVM_OPTS -Dcom.sun.management.jmxremote"
-;                     ".authenticate=true\"/JVM_OPTS=\"$JVM_OPTS -Dcom.sun.management"
-;                     ".jmxremote.authenticate=false\"/g'")
-;                "'/JVM_OPTS=\"$JVM_OPTS -Dcassandra.mv_disable_coordinator_batchlog=.*\"/d'"]]
-;     (c/exec :sed :-i (lit rep) "~/cassandra/conf/cassandra-env.sh"))
+   (c/exec :cp :-f "/var/lib/scylla/conf/scylla.yaml.orig" "/var/lib/scylla/conf/scylla.yaml"
    (doseq [rep (into ["\"s/cluster_name: .*/cluster_name: 'jepsen'/g\""
                       "\"s/row_cache_size_in_mb: .*/row_cache_size_in_mb: 20/g\""
                       "\"s/seeds: .*/seeds: 'n1,n2'/g\""
@@ -211,20 +202,18 @@
                        ["\"s/#commitlog_compression.*/commitlog_compression:/g\""
                         (str "\"s/#   - class_name: LZ4Compressor/"
                              "    - class_name: LZ4Compressor/g\"")]))]
-     (c/exec :sed :-i (lit rep) "~/cassandra/conf/cassandra.yaml"))
-;   (c/exec :echo (str "JVM_OPTS=\"$JVM_OPTS -Dcassandra.mv_disable_coordinator_batchlog="
-;                      (coordinator-batchlog-disabled?) "\"")
-;           :>> "~/cassandra/conf/cassandra-env.sh")
-   (c/exec :sed :-i (lit "\"s/INFO/DEBUG/g\"") "~/cassandra/conf/logback.xml")
+     (c/exec :sed :-i (lit rep) "/var/lib/scylla/conf/scylla.yaml"))
+;   (c/exec :sed :-i (lit "\"s/INFO/DEBUG/g\"") "~/cassandra/conf/logback.xml")
    (c/exec :echo (str "auto_bootstrap: " (-> test :bootstrap deref node boolean))
-           :>> "~/cassandra/conf/cassandra.yaml")))
+           :>> "/var/lib/scylla/conf/scylla.yaml")))
 
 (defn start!
-  "Starts Cassandra."
+  "Starts ScyllaDB"
   [node test]
-  (info node "starting Cassandra")
+  (info node "starting ScyllaDB")
   (c/su
-   (c/exec (lit "~/cassandra/bin/cassandra"))))
+   (c/exec :service :scylla-server :start)
+   (c/exec :service :scylla-jmx :start)))
 
 (defn guarded-start!
   "Guarded start that only starts nodes that have joined the cluster already
@@ -237,14 +226,13 @@
       (start! node test))))
 
 (defn stop!
-  "Stops Cassandra."
+  "Stops ScyllaDB"
   [node]
-  (info node "stopping Cassandra")
+  (info node "stopping ScyllaDB")
   (c/su
-   (meh (c/exec :killall :java))
-   (while (.contains (c/exec :ps :-ef) "java")
-     (Thread/sleep 100)))
-  (info node "has stopped Cassandra"))
+   (c/exec :service :scylla-server :stop)
+   (c/exec :service :scylla-jmx :stop))
+  (info node "has stopped ScyllaDB"))
 
 (defn wipe!
   "Shuts down Cassandra and wipes data."
@@ -252,14 +240,11 @@
   (stop! node)
   (info node "deleting data files")
   (c/su
-   (meh (c/exec :rm :-r "~/cassandra/logs"))
-   (meh (c/exec :rm :-r "~/cassandra/data/data"))
-   (meh (c/exec :rm :-r "~/cassandra/data/hints"))
-   (meh (c/exec :rm :-r "~/cassandra/data/commitlog"))
-   (meh (c/exec :rm :-r "~/cassandra/data/saved_caches"))))
+   (meh (c/exec :rm :-r "/var/lib/scylla/data/*"))
+   (meh (c/exec :rm :-r "/var/lib/scylla/commitlog/*"))))
 
 (defn db
-  "Cassandra for a particular version."
+  "New ScyllaDB run"
   [version]
   (reify db/DB
     (setup! [_ test node]
@@ -274,9 +259,10 @@
       (when-not (seq (System/getenv "LEAVE_CLUSTER_RUNNING"))
           (wipe! node)))
 
-    db/LogFiles
-    (log-files [db test node]
-      ["~/cassandra/logs/system.log"])))
+;    db/LogFiles
+;    (log-files [db test node]
+;      ["~/cassandra/logs/system.log"])
+      ))
 
 (defn recover
   "A generator which stops the nemesis and allows some time for recovery."
