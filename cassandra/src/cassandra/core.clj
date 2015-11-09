@@ -173,18 +173,19 @@
 ;     :apt-get :update)
 ;    (c/exec
 ;     :apt-get :install :-y :--force-yes :scylla-server :scylla-jmx :scylla-tools)
-    (c/exec
-     :cp :-f "/var/lib/scylla/conf/scylla.yaml" "/var/lib/scylla/conf/scylla.yaml.orig")))
+;    (c/exec
+;     :cp :-f "/var/lib/scylla/conf/scylla.yaml" "/var/lib/scylla/conf/scylla.yaml.orig")
+     ))
 
 (defn configure!
   "Uploads configuration files to the given node."
   [node test]
   (info node "configuring ScyllaDB")
   (c/su
-   (c/exec :cp :-f "/var/lib/scylla/conf/scylla.yaml.orig" "/var/lib/scylla/conf/scylla.yaml"
+   (c/exec :cp :-f "/var/lib/scylla/conf/scylla.yaml.orig" "/var/lib/scylla/conf/scylla.yaml")
    (doseq [rep (into ["\"s/cluster_name: .*/cluster_name: 'jepsen'/g\""
                       "\"s/row_cache_size_in_mb: .*/row_cache_size_in_mb: 20/g\""
-                      "\"s/seeds: .*/seeds: 'n1,n2'/g\""
+                      (str "\"s/seeds: .*/seeds: " (dns-resolve n1) ', ' (dns-resolve n2) "/g\"")
                       (str "\"s/listen_address: .*/listen_address: " (dns-resolve node)
                            "/g\"")
                       (str "\"s/rpc_address: .*/rpc_address: " (dns-resolve node) "/g\"")
@@ -207,7 +208,7 @@
      (c/exec :sed :-i (lit rep) "/var/lib/scylla/conf/scylla.yaml"))
 ;   (c/exec :sed :-i (lit "\"s/INFO/DEBUG/g\"") "~/cassandra/conf/logback.xml")
    (c/exec :echo (str "auto_bootstrap: " (-> test :bootstrap deref node boolean))
-           :>> "/var/lib/scylla/conf/scylla.yaml"))))
+           :>> "/var/lib/scylla/conf/scylla.yaml")))
 
 (defn start!
   "Starts ScyllaDB"
@@ -216,7 +217,7 @@
   (c/su
 ;   (c/exec :service :scylla-server :start)
 ;   (c/exec :service :scylla-jmx :start)
-    (c/exec /root/scylla-run.sh)
+    (c/exec "/root/scylla-run.sh")
    ))
 
 (defn guarded-start!
