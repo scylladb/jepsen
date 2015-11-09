@@ -165,14 +165,14 @@
 ;            (c/exec :rm :-r :-f (lit "~/scylladb"))
 ;            (c/exec :mv (lit "~/apache* ~/cassandra"))
 ;            (c/exec :echo url :> (lit ".download"))))
-    (c/exec
-     :echo
-     "deb  http://s3.amazonaws.com/downloads.scylladb.com/deb/ubuntu trusty/scylladb multiverse"
-     :>"/etc/apt/sources.list.d/scylla.list")
-    (c/exec 
-     :apt-get :update)
-    (c/exec
-     :apt-get :install :-y :--force-yes :scylla-server :scylla-jmx :scylla-tools)
+;    (c/exec
+;     :echo
+;     "deb  http://s3.amazonaws.com/downloads.scylladb.com/deb/ubuntu trusty/scylladb multiverse"
+;     :>"/etc/apt/sources.list.d/scylla.list")
+;    (c/exec
+;     :apt-get :update)
+;    (c/exec
+;     :apt-get :install :-y :--force-yes :scylla-server :scylla-jmx :scylla-tools)
     (c/exec
      :cp :-f "/var/lib/scylla/conf/scylla.yaml" "/var/lib/scylla/conf/scylla.yaml.orig")))
 
@@ -214,8 +214,10 @@
   [node test]
   (info node "starting ScyllaDB")
   (c/su
-   (c/exec :service :scylla-server :start)
-   (c/exec :service :scylla-jmx :start)))
+;   (c/exec :service :scylla-server :start)
+;   (c/exec :service :scylla-jmx :start)
+    (c/exec /root/scylla-run.sh)
+   ))
 
 (defn guarded-start!
   "Guarded start that only starts nodes that have joined the cluster already
@@ -232,8 +234,14 @@
   [node]
   (info node "stopping ScyllaDB")
   (c/su
-   (c/exec :service :scylla-server :stop)
-   (c/exec :service :scylla-jmx :stop))
+;   (c/exec :service :scylla-server :stop)
+;   (c/exec :service :scylla-jmx :stop))
+   (meh (c/exec :killall :java))
+   (while (.contains (c/exec :ps :-ef) "java")
+     (Thread/sleep 100))
+   (meh (c/exec :killall :scylla))
+   (while (.contains (c/exec :ps :-ef) "scylla")
+     (Thread/sleep 100)))
   (info node "has stopped ScyllaDB"))
 
 (defn wipe!
