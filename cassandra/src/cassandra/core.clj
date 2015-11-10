@@ -51,7 +51,7 @@
   "Returns whether to use commitlog compression"
   []
   (= (some-> (System/getenv "JEPSEN_COMMITLOG_COMPRESSION") (clojure.string/lower-case))
-     "true"))
+     "false"))
 
 (defn coordinator-batchlog-disabled?
   "Returns whether to disable the coordinator batchlog for MV"
@@ -185,7 +185,7 @@
    (c/exec :cp :-f "/var/lib/scylla/conf/scylla.yaml.orig" "/var/lib/scylla/conf/scylla.yaml")
    (doseq [rep (into ["\"s/cluster_name: .*/cluster_name: 'jepsen'/g\""
                       "\"s/row_cache_size_in_mb: .*/row_cache_size_in_mb: 20/g\""
-                      (str "\"s/seeds: .*/seeds: " (dns-resolve n1) ', ' (dns-resolve n2) "/g\"")
+                      (str "\"s/seeds: .*/seeds: '" (dns-resolve :n1) "," (dns-resolve :n2) "'/g\"")
                       (str "\"s/listen_address: .*/listen_address: " (dns-resolve node)
                            "/g\"")
                       (str "\"s/rpc_address: .*/rpc_address: " (dns-resolve node) "/g\"")
@@ -270,9 +270,9 @@
       (when-not (seq (System/getenv "LEAVE_CLUSTER_RUNNING"))
           (wipe! node)))
 
-;    db/LogFiles
-;    (log-files [db test node]
-;      ["~/cassandra/logs/system.log"])
+    db/LogFiles
+    (log-files [db test node]
+      ["/var/lib/scylla/system.log"])
       ))
 
 (defn recover
