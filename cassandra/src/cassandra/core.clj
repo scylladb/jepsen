@@ -216,8 +216,8 @@
   (info node "starting ScyllaDB")
   (c/su
 ;   (c/exec :service :scylla-server :start)
-    (c/exec :service :scylla-jmx :start)
     (c/exec "/root/scylla-run.sh")
+    (c/exec :service :scylla-jmx :start)
    ))
 
 (defn guarded-start!
