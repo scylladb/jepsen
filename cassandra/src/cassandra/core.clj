@@ -196,7 +196,7 @@
                            (disable-hints?) "/g\"")
                       "\"s/commitlog_sync: .*/commitlog_sync: batch/g\""
                       (str "\"s/# commitlog_sync_batch_window_in_ms: .*/"
-                           "commitlog_sync_batch_window_in_ms: 1.0/g\"")
+                           "commitlog_sync_batch_window_in_ms: 1/g\"")
                       "\"s/commitlog_sync_period_in_ms: .*/#/g\""
                       (str "\"s/# phi_convict_threshold: .*/phi_convict_threshold: " (phi-level)
                            "/g\"")
@@ -216,7 +216,7 @@
   (info node "starting ScyllaDB")
   (c/su
 ;   (c/exec :service :scylla-server :start)
-;   (c/exec :service :scylla-jmx :start)
+    (c/exec :service :scylla-jmx :start)
     (c/exec "/root/scylla-run.sh")
    ))
 
@@ -237,7 +237,7 @@
   (c/su
 ;   (c/exec :service :scylla-server :stop)
 ;   (c/exec :service :scylla-jmx :stop))
-   (meh (c/exec :killall :java))
+   (meh (c/exec :service :scylla-jmx :stop))
    (while (.contains (c/exec :ps :-ef) "java")
      (Thread/sleep 100))
    (meh (c/exec :killall :scylla))
@@ -251,8 +251,7 @@
   (stop! node)
   (info node "deleting data files")
   (c/su
-   (meh (c/exec :rm :-r "/var/lib/scylla/data/*"))
-   (meh (c/exec :rm :-r "/var/lib/scylla/commitlog/*"))))
+   (meh (c/exec "/root/wipe.sh))))
 
 (defn db
   "New ScyllaDB run"
