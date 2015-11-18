@@ -251,7 +251,7 @@
   (stop! node)
   (info node "deleting data files")
   (c/su
-   (meh (c/exec "/root/wipe.sh))))
+   (meh (c/exec "/root/wipe.sh"))))
 
 (defn db
   "New ScyllaDB run"
