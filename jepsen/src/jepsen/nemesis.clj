@@ -128,10 +128,16 @@
   []
   (partitioner majorities-ring))
 
+#(defn set-time!
+#  "Set the local node time in POSIX seconds."
+#  [t]
+#  (c/su (c/exec :date "+%s" :-s (str \@ (long t)))))
+
 (defn set-time!
-  "Set the local node time in POSIX seconds."
+  "Set the local node time skew (in seconds)"
   [t]
-  (c/su (c/exec :date "+%s" :-s (str \@ (long t)))))
+  (c/su (c/exec :printf "%ds" t :> "/root/.faketimerc")))
+
 
 (defn clock-scrambler
   "Randomizes the system clock of all nodes within a dt-second window."
@@ -143,14 +149,13 @@
     (invoke! [this test op]
       (assoc op :value  (case (:f op)
                           :start (c/on-many (:nodes test)
-                                            (set-time! (+ (/ (System/currentTimeMillis) 1000)
-                                                          (- (rand-int (* 2 dt)) dt))))
+                                            (set-time! (- (rand-int (* 2 dt)) dt)))
                           :stop (c/on-many (:nodes test)
-                                           (set-time! (/ (System/currentTimeMillis) 1000))))))
+                                           (set-time! 0)))))
 
     (teardown! [this test]
       (c/on-many (:nodes test)
-                 (set-time! (/ (System/currentTimeMillis) 1000))))))
+                 (set-time! 0)))))
 
 (defn node-start-stopper
   "Takes a targeting function which, given a list of nodes, returns a single

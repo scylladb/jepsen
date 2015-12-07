@@ -215,6 +215,7 @@
   [node test]
   (info node "starting ScyllaDB")
   (c/su
+    (c/exec :echo "0s" :> "/root/.faketimerc")
 ;   (c/exec :service :scylla-server :start)
     (c/exec "/root/scylla-run.sh")
     (c/exec :service :scylla-jmx :start)
