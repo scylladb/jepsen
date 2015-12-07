@@ -128,10 +128,10 @@
   []
   (partitioner majorities-ring))
 
-#(defn set-time!
-#  "Set the local node time in POSIX seconds."
-#  [t]
-#  (c/su (c/exec :date "+%s" :-s (str \@ (long t)))))
+;(defn set-time!
+;  "Set the local node time in POSIX seconds."
+;  [t]
+;  (c/su (c/exec :date "+%s" :-s (str \@ (long t)))))
 
 (defn set-time!
   "Set the local node time skew (in seconds)"
