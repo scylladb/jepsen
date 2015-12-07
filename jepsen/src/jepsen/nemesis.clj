@@ -138,7 +138,9 @@
   [t]
   (c/su (if (== 0 t)
 	  (c/exec :echo :-n "" :> "/root/.faketimerc")
-	  (c/exec :printf "%ds" t :> "/root/.faketimerc"))))
+	  (if (> t 0)
+	    (c/exec :printf "+%ds" t :> "/root/.faketimerc")
+	    (c/exec :printf "%ds" t :> "/root/.faketimerc")))))
 
 
 (defn clock-scrambler
