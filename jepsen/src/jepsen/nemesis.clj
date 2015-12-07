@@ -136,7 +136,9 @@
 (defn set-time!
   "Set the local node time skew (in seconds)"
   [t]
-  (c/su (c/exec :printf "%ds" t :> "/root/.faketimerc")))
+  (c/su (if (== 0 t)
+	  (c/exec :echo :-n "" :> "/root/.faketimerc")
+	  (c/exec :printf "%ds" t :> "/root/.faketimerc"))))
 
 
 (defn clock-scrambler
