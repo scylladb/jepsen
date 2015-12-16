@@ -1,3 +1,7 @@
+*.vpj
+*.vpw
+*.vpwhistu
+*.vtg
 .cake
 .lein-repl-history
 pom.xml
