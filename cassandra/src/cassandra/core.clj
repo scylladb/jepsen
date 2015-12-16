@@ -217,7 +217,7 @@
   (c/su
     (nemesis/set-time! 0)
 ;   (c/exec :service :scylla-server :start)
-    (c/exec "/root/scylla-run.sh")
+    (c/exec "/root/scylla-run.sh" :--log-to-syslog :0 :--log-to-stdout :1 :--default-log-level :trace :--network-stack :posix :-m :8G :--collectd :0 :--poll-mode)
     (c/exec :service :scylla-jmx :start)
    ))
 
