@@ -49,7 +49,9 @@
     (invoke! [this test op]
       (let [live-nodes (cassandra/live-nodes test)]
         (doseq [node live-nodes]
-          (cassandra/nodetool node "replaybatchlog"))
+	  ; we do not support it yet
+          ;(cassandra/nodetool node "replaybatchlog")
+	  )
         (assoc op :value (str live-nodes " batch logs replayed"))))
     (teardown! [this test] this)))
 
