@@ -157,7 +157,9 @@
                                      (set-time! node_time_shift)
 				     node_time_shift))
                           :stop (c/on-many (:nodes test)
-                                   ((set-time! 0) "0")))))
+                                   (let []
+				    (set-time! 0) 
+				    "0")))))
 
     (teardown! [this test]
       (c/on-many (:nodes test)
