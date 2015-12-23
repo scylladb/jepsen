@@ -22,8 +22,8 @@
 (deftest ^:mv ^:steady mv-flush-compact
   (run-test! flush-compact-test))
 
-(deftest ^:clock mv-clock-drift
-  (run-test! clock-drift-test))
+;(deftest ^:clock mv-clock-drift
+;  (run-test! clock-drift-test))
 
 ;; Bootstrapping tests
 (deftest ^:mv ^:bootstrap mv-bridge-bootstrap
@@ -38,8 +38,8 @@
 (deftest ^:mv ^:bootstrap mv-crash-subset-bootstrap
   (run-test! crash-subset-test-bootstrap))
 
-(deftest ^:clock mv-clock-drift-bootstrap
-  (run-test! clock-drift-test-bootstrap))
+;(deftest ^:clock mv-clock-drift-bootstrap
+;  (run-test! clock-drift-test-bootstrap))
 
 ;; Decommission tests
 (deftest ^:mv ^:decommission mv-bridge-decommission
@@ -54,8 +54,8 @@
 (deftest ^:mv ^:decommission mv-crash-subset-decommission
   (run-test! crash-subset-test-decommission))
 
-(deftest ^:clock mv-clock-drift-decommission
-  (run-test! clock-drift-test-decommission))
+;(deftest ^:clock mv-clock-drift-decommission
+;  (run-test! clock-drift-test-decommission))
 
 ;; Consistency delay test
 (comment (deftest consistency-delay
