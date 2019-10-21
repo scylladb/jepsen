@@ -75,3 +75,89 @@
   (is (= [[1]] (drop-common-proper-prefix [[1]])))
   (is (= [[2]] (drop-common-proper-prefix [[1 2]])))
   (is (= [[2] [2]] (drop-common-proper-prefix [[1 2] [1 2]]))))
+
+(deftest letr-test
+  (testing "no bindings"
+    (is (= (letr []) nil))
+    (is (= (letr [] 1 2) 2)))
+
+  (testing "standard bindings"
+    (is (= (letr [a 1, b a] 2 a) 1)))
+
+  (testing "early return"
+    (let [side-effect (atom false)]
+      (is (= (letr [a   1
+                    x   (if (pos? a) (return :pos) :neg)
+                    foo (reset! side-effect true)]
+               x)
+             :pos))
+      (is (not @side-effect))))
+
+  (testing "using non-return branch"
+    (let [side-effect (atom false)]
+      (is (= (letr [a   -1
+                    x   (if (pos? a) (return :pos) :neg)
+                    foo (reset! side-effect true)]
+               x)
+             :neg))
+      (is @side-effect)))
+
+  (testing "multiple return"
+    (is (= (letr [a 2
+                  _ (when (= a 1) (return :1))
+                  _ (when (= a 2) (return :2))
+                  _ (when (= a 3) (return :3))]
+             4)
+           :2))))
+
+(deftest timeout-test
+  ; Fast operations pass through the inner result or exception.
+  (is ::success (timeout 1000 ::timed-out
+                         ::success))
+  (is (thrown? ArithmeticException
+               (timeout 1000 ::timed-out
+                        (/ 1 0))))
+  ; Slow operations are interrupted and return timeout value.
+  (is ::timed-out (timeout 10 ::timed-out
+                           (Thread/sleep 1000)))
+  ; This is a more complicated version of the previous test that
+  ; verifies that the function is interrupted when a timeout occurs.
+  (let* [p (promise)
+         ret (timeout 10 ::timed-out
+                      (try
+                        (Thread/sleep 1000)
+                        (deliver p ::finished)
+                        (catch InterruptedException e
+                          (deliver p ::exception))))]
+    (is ::timed-out ret)
+    (is ::exception (deref p 10 ::timed-out))))
+
+(deftest lazy-atom-test
+  (testing "reads"
+    (let [calls (atom 0)
+          a (lazy-atom (fn [] (swap! calls inc) 0))]
+      (is (= 0 @calls))
+      (is (= 0 @a))
+      (is (= 1 @calls))
+      (is (= 0 @a))
+      (is (= 1 @calls))))
+
+  (testing "increments"
+    (let [calls (atom 0)
+          a     (lazy-atom (fn [] (Thread/sleep 10) (swap! calls inc) 0))
+          f1    (future (swap! a inc))
+          f2    (future (swap! a inc))]
+      @f1
+      @f2
+      (is (= 1 @calls))
+      (is (= 2 @a)))))
+
+(deftest nemesis-intervals-test
+  (let [s1 {:process :nemesis, :f :start, :value 1}
+        s2 {:process :nemesis, :f :start, :value 2}
+        s3 {:process :nemesis, :f :start, :value 3}
+        s4 {:process :nemesis, :f :start, :value 4}
+        e1 {:process :nemesis, :f :stop, :value 1}
+        e2 {:process :nemesis, :f :stop, :value 2}]
+    (is (= [[s1 e1] [s2 e2] [s3 e1] [s4 e2]]
+           (nemesis-intervals [s1 s2 s3 s4 e1 e2])))))

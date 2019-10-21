@@ -4,10 +4,11 @@
   (:require [clojure.set :as set]
             [jepsen.util :refer [meh]]
             [jepsen.os :as os]
-            [jepsen.control :as c]
+            [jepsen.control :as c :refer [|]]
             [jepsen.control.util :as cu]
-            [jepsen.control.net :as net]
-            [clojure.string :as str]))
+            [jepsen.net :as net]
+            [clojure.string :as str]
+            [slingshot.slingshot :refer [try+ throw+]]))
 
 (defn setup-hostfile!
   "Makes sure the hostfile has a loopback entry for the local hostname"
@@ -27,10 +28,8 @@
 (defn time-since-last-update
   "When did we last run an apt-get update, in seconds ago"
   []
-  (try (- (Long/parseLong (c/exec :date "+%s"))
-          (Long/parseLong (c/exec :stat :-c "%Y" "/var/cache/apt/pkgcache.bin")))
-       (catch RuntimeException e
-         Long/MAX_VALUE)))
+  (- (Long/parseLong (c/exec :date "+%s"))
+     (Long/parseLong (c/exec :stat :-c "%Y" "/var/cache/apt/pkgcache.bin" "||" :echo 0))))
 
 (defn update!
   "Apt-get update."
@@ -88,7 +87,7 @@
       (for [[pkg version] pkgs]
         (when (not= version (installed-version pkg))
           (info "Installing" pkg version)
-          (c/exec :apt-get :install :-y :--force-yes
+          (c/exec :env "DEBIAN_FRONTEND=noninteractive" :apt-get :install :-y :--force-yes
                   (str (name pkg) "=" version)))))
 
     ; Install any version
@@ -97,7 +96,8 @@
       (when-not (empty? missing)
         (c/su
           (info "Installing" missing)
-          (apply c/exec :apt-get :install :-y missing))))))
+          (apply c/exec :env "DEBIAN_FRONTEND=noninteractive"
+                 :apt-get :install :-y :--force-yes missing))))))
 
 (defn add-key!
   "Receives an apt key from the given keyserver."
@@ -113,42 +113,73 @@
    (add-repo! repo-name apt-line nil nil))
   ([repo-name apt-line keyserver key]
    (let [list-file (str "/etc/apt/sources.list.d/" (name repo-name) ".list")]
-     (when-not (cu/file? list-file)
+     (when-not (cu/exists? list-file)
        (info "setting up" repo-name "apt repo")
        (when (or keyserver key)
          (add-key! keyserver key))
        (c/exec :echo apt-line :> list-file)
        (update!)))))
 
-(def os
-  (reify os/OS
-    (setup! [_ test node]
-      (info node "setting up debian")
+(defn install-jdk8!
+  "Installs an oracle jdk8 via webupd8. Ugh, this is such a PITA."
+  []
+  (c/su
+    (add-repo!
+      "webupd8"
+      "deb http://ppa.launchpad.net/webupd8team/java/ubuntu trusty main"
+      "hkp://keyserver.ubuntu.com:80"
+      "EEA14886")
+    (c/exec :echo "debconf shared/accepted-oracle-license-v1-1 select true" |
+            :debconf-set-selections)
+    (c/exec :echo "debconf shared/accepted-oracle-license-v1-1 seen true" |
+            :debconf-set-selections)
+    (install [:oracle-java8-installer])
+    (install [:oracle-java8-set-default])))
 
-      (setup-hostfile!)
+(defn install-jdk11!
+  "Installs an openjdk jdk11 via stretch-backports."
+  []
+  (c/su
+    (add-repo!
+      "stretch-backports"
+      "deb http://deb.debian.org/debian stretch-backports main")
+    (install [:openjdk-11-jdk])))
 
-      (maybe-update!)
+(deftype Debian []
+  os/OS
+  (setup! [_ test node]
+    (info node "setting up debian")
 
-      (c/su
-        ; Packages!
-        (install [:wget
-                  :sysvinit-core
-                  :sysvinit
-                  :sysvinit-utils
-                  :curl
-                  :vim
-                  :man-db
-                  :faketime
-                  :unzip
-                  :iptables
-                  :iputils-ping
-                  :rsyslog
-                  :logrotate])
+    (setup-hostfile!)
 
-        ; Fucking systemd breaks a bunch of packages
-        (if (installed? :systemd)
-          (c/exec :apt-get :remove :-y :--purge :--auto-remove :systemd)))
+    (maybe-update!)
 
-      (meh (net/heal)))
+    (c/su
+      ; Packages!
+      (install [:apt-transport-https
+                :wget
+                :curl
+                :vim
+                :man-db
+                :faketime
+                :ntpdate
+                :unzip
+                :iptables
+                :psmisc
+                :tar
+                :bzip2
+                :iputils-ping
+                :iproute
+                :rsyslog
+                :logrotate
+                :dirmngr])
+      (try+ (install [:libzip4])
+            (catch [:exit 100] _
+              ; Wrong package name; let's use the old one for jessie
+              (install [:libzip2]))))
 
-    (teardown! [_ test node])))
+    (meh (net/heal! (:net test) test)))
+
+  (teardown! [_ test node]))
+
+(def os "An implementation of the Debian OS." (Debian.))

@@ -1,12 +1,12 @@
 (ns jepsen.tests
   "Provide utilities for writing tests using jepsen."
-  (:use jepsen.core)
   (:require [jepsen.os :as os]
             [jepsen.db :as db]
             [jepsen.client :as client]
+            [jepsen.control :as control]
             [jepsen.nemesis :as nemesis]
             [jepsen.generator :as gen]
-            [jepsen.model :as model]
+            [knossos.model :as model]
             [jepsen.checker :as checker]
             [jepsen.net :as net]))
 
@@ -14,16 +14,16 @@
   "Boring test stub.
   Typically used as a basis for writing more complex tests.
   "
-  {:nodes     [:n1 :n2 :n3 :n4 :n5]
+  {:nodes     ["n1" "n2" "n3" "n4" "n5"]
    :name      "noop"
    :os        os/noop
    :db        db/noop
    :net       net/iptables
+   :remote    control/ssh
    :client    client/noop
    :nemesis   nemesis/noop
    :generator gen/void
-   :model     model/noop
-   :checker   checker/linearizable})
+   :checker   (checker/unbridled-optimism)})
 
 (defn atom-db
   "Wraps an atom as a database."
@@ -36,8 +36,10 @@
   "A CAS client which uses an atom for state."
   [state]
   (reify client/Client
-    (setup!    [this test node] this)
+    (open!     [this test node] this)
+    (setup!    [this test])
     (teardown! [this test])
+    (close!    [this test])
     (invoke!   [this test op]
       (case (:f op)
         :write (do (reset! state   (:value op))
