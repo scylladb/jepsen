@@ -13,7 +13,6 @@
             [qbits.hayt.dsl.clause :refer :all]
             [qbits.hayt.dsl.statement :refer :all]
             [cassandra.core :refer :all]
-            ;[cassandra.checker :as extra-checker]
             [cassandra.conductors :as conductors])
   (:import (clojure.lang ExceptionInfo)
            (com.datastax.driver.core.exceptions UnavailableException
@@ -25,23 +24,6 @@
                                ;it isn't really a valid keyword from reader's
                                ;perspective
 
-(defn create-my-keyspace
-[session test {:keys [keyspace]}]        
-(alia/execute session (create-keyspace (keyword keyspace)
-                                        (if-exists false)          
-                                        (with {:replication {"class"              "SimpleStrategy"                
-                                                            "replication_factor" (:rf test)}}))))
-
-(defn create-my-table
-[session {:keys [keyspace table schema compaction-strategy]
-          :or {compaction-strategy :SizeTieredCompactionStrategy}}]
-(alia/execute session (use-keyspace (keyword keyspace)))
-(alia/execute session (create-table (keyword table)
-                                    (if-exists false)
-                                    (column-definitions schema) 
-                                    (with {:compaction                    
-                                            {:class compaction-strategy}}))))
-
 (defrecord CasRegisterClient [tbl-created? session]
   client/Client
   (open! [_ test _]
@@ -52,23 +34,27 @@
   (setup! [_ test]
     (locking tbl-created?
       (when (compare-and-set! tbl-created? false true)
-        (alia/execute session "CREATE KEYSPACE IF NOT EXISTS jepsen_keyspace
-          WITH REPLICATION = { 'class' : 'SimpleStrategy' , 'replication_factor' : 3};" )
-        (alia/execute session "CREATE TABLE IF NOT EXISTS jepsen_keyspace.lwt
-          (
-            id int PRIMARY KEY,
-            value int
-          ) WITH compaction = {'class' : 'SizeTieredCompactionStrategy'};"))))
+        (alia/execute session (hayt/->raw (create-keyspace :jepsen_keyspace
+                                                           (if-exists false)
+                                                           (with {:replication {:class :SimpleStrategy
+                                                                                :replication_factor 3}}))))
+        (alia/execute session (hayt/->raw (use-keyspace :jepsen_keyspace)))
+        (alia/execute session (hayt/->raw (create-table :lwt
+                                                        (if-exists false)
+                                                        (column-definitions {:id    :int
+                                                                             :value :int
+                                                                             :primary-key [:id]})
+                                                        (with {:compaction {:class compaction-strategy}})))))))
 
   (invoke! [_ _ op]
-    (alia/execute session "USE jepsen_keyspace;")
+    (alia/execute session (hayt/->raw (use-keyspace :jepsen_keyspace)))
     (case (:f op)
       :cas (try (let [[old new] (:value op)
                       result (alia/execute session
                                            (hayt/->raw (update :lwt
                                                    (set-columns {:value new})
                                                    (where [[= :id 0]])
-                                                   (only-if [[:value old]]))) {:consistency :one})]
+                                                   (only-if [[:value old]]))))]
                   (if (-> result first ak)
                     (assoc op :type :ok)
                     (assoc op :type :fail :error (-> result first :value))))
@@ -86,13 +72,13 @@
                         result (alia/execute session (hayt/->raw (update :lwt
                                                              (set-columns {:value v})
                                                              (only-if [[:in :value (range 5)]])
-                                                             (where [[= :id 0]]))) {:consistency :one})]
+                                                             (where [[= :id 0]]))))]
                     (if (-> result first ak)
                       (assoc op :type :ok)
                       (let [result' (alia/execute session (hayt/->raw (insert :lwt
                                                                   (values [[:id 0]
                                                                            [:value v]])
-                                                                  (if-exists false))) {:consistency :one})]
+                                                                  (if-exists false))))]
                         (if (-> result' first ak)
                           (assoc op :type :ok)
                           (assoc op :type :fail)))))
