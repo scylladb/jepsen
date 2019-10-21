@@ -1,35 +1,21 @@
 (ns cassandra.lwt
   (:require [clojure [pprint :refer :all]
              [string :as str]]
-            [clojure.java.io :as io]
             [clojure.tools.logging :refer [debug info warn]]
             [jepsen [core      :as jepsen]
-             [codec     :as codec]
-             [db        :as db]
-             [util      :as util :refer [meh timeout]]
-             [control   :as c :refer [| lit]]
              [client    :as client]
              [checker   :as checker]
-             [model     :as model]
              [generator :as gen]
-             [nemesis   :as nemesis]
-             [store     :as store]
-             [report    :as report]
-             [tests     :as tests]]
-            [jepsen.checker.timeline :as timeline]
-            [jepsen.control [net :as net]
-             [util :as net/util]]
-            [jepsen.os.debian :as debian]
-            [knossos.core :as knossos]
-            [clojurewerkz.cassaforte.client :as cassandra]
-            [clojurewerkz.cassaforte.query :refer :all]
-            [clojurewerkz.cassaforte.policies :refer :all]
-            [clojurewerkz.cassaforte.cql :as cql]
+             [nemesis   :as nemesis]]
+            [knossos.model :as model]
+            [qbits.alia :as alia]
+            [qbits.hayt :as hayt]
+            [qbits.hayt.dsl.clause :refer :all]
+            [qbits.hayt.dsl.statement :refer :all]
             [cassandra.core :refer :all]
-            [cassandra.checker :as extra-checker]
+            ;[cassandra.checker :as extra-checker]
             [cassandra.conductors :as conductors])
   (:import (clojure.lang ExceptionInfo)
-           (com.datastax.driver.core ConsistencyLevel)
            (com.datastax.driver.core.exceptions UnavailableException
                                                 WriteTimeoutException
                                                 ReadTimeoutException
@@ -39,90 +25,112 @@
                                ;it isn't really a valid keyword from reader's
                                ;perspective
 
-(defrecord CasRegisterClient [conn]
+(defn create-my-keyspace
+[session test {:keys [keyspace]}]        
+(alia/execute session (create-keyspace (keyword keyspace)
+                                        (if-exists false)          
+                                        (with {:replication {"class"              "SimpleStrategy"                
+                                                            "replication_factor" (:rf test)}}))))
+
+(defn create-my-table
+[session {:keys [keyspace table schema compaction-strategy]
+          :or {compaction-strategy :SizeTieredCompactionStrategy}}]
+(alia/execute session (use-keyspace (keyword keyspace)))
+(alia/execute session (create-table (keyword table)
+                                    (if-exists false)
+                                    (column-definitions schema) 
+                                    (with {:compaction                    
+                                            {:class compaction-strategy}}))))
+
+(defrecord CasRegisterClient [tbl-created? session]
   client/Client
-  (setup! [_ test node]
-    (locking setup-lock
-      (let [conn (cassandra/connect (->> test :nodes (map name)))]
-        (cql/create-keyspace conn "jepsen_keyspace"
-                             (if-not-exists)
-                             (with {:replication
-                                    {:class "SimpleStrategy"
-                                     :replication_factor 3}}))
-        (cql/use-keyspace conn "jepsen_keyspace")
-        (cql/create-table conn "lwt"
-                          (if-not-exists)
-                          (column-definitions {:id :int
-                                               :value :int
-                                               :primary-key [:id]})
-                          (with {:compaction
-                                 {:class (compaction-strategy)}}))
-        (->CasRegisterClient conn))))
-  (invoke! [this test op]
+  (open! [_ test _]
+    (let [cluster (alia/cluster {:contact-points (:nodes test)})
+          session (alia/connect cluster)]
+      (->CasRegisterClient tbl-created? session)))
+
+  (setup! [_ test]
+    (locking tbl-created?
+      (when (compare-and-set! tbl-created? false true)
+        (alia/execute session "CREATE KEYSPACE IF NOT EXISTS jepsen_keyspace
+          WITH REPLICATION = { 'class' : 'SimpleStrategy' , 'replication_factor' : 3};" )
+        (alia/execute session "CREATE TABLE IF NOT EXISTS jepsen_keyspace.lwt
+          (
+            id int PRIMARY KEY,
+            value int
+          ) WITH compaction = {'class' : 'SizeTieredCompactionStrategy'};"))))
+
+  (invoke! [_ _ op]
+    (alia/execute session "USE jepsen_keyspace;")
     (case (:f op)
-      :cas (try (let [[v v'] (:value op)
-                      result (cql/update conn "lwt" {:value v'}
-                                         (only-if [[= :value v]])
-                                         (where [[= :id 0]]))]
+      :cas (try (let [[old new] (:value op)
+                      result (alia/execute session
+                                           (hayt/->raw (update :lwt
+                                                   (set-columns {:value new})
+                                                   (where [[= :id 0]])
+                                                   (only-if [[:value old]]))) {:consistency :one})]
                   (if (-> result first ak)
                     (assoc op :type :ok)
-                    (assoc op :type :fail :value (-> result first :value))))
+                    (assoc op :type :fail :error (-> result first :value))))
                 (catch UnavailableException e
                   (assoc op :type :fail :error (.getMessage e)))
                 (catch ReadTimeoutException e
-                  (assoc op :type :info :value :read-timed-out))
+                  (assoc op :type :info :error :read-timed-out))
                 (catch WriteTimeoutException e
-                  (assoc op :type :info :value :write-timed-out))
+                  (assoc op :type :info :error :write-timed-out))
                 (catch NoHostAvailableException e
                   (info "All the servers are down - waiting 2s")
                   (Thread/sleep 2000)
                   (assoc op :type :fail :error (.getMessage e))))
-      :write (try (let [v' (:value op)
-                        result (cql/update conn
-                                           "lwt"
-                                           {:value v'}
-                                           (only-if [[:in :value (range 5)]])
-                                           (where [[= :id 0]]))]
+      :write (try (let [v (:value op)
+                        result (alia/execute session (hayt/->raw (update :lwt
+                                                             (set-columns {:value v})
+                                                             (only-if [[:in :value (range 5)]])
+                                                             (where [[= :id 0]]))) {:consistency :one})]
                     (if (-> result first ak)
                       (assoc op :type :ok)
-                      (let [result' (cql/insert conn "lwt" {:id 0
-                                                            :value v'}
-                                                (if-not-exists))]
+                      (let [result' (alia/execute session (hayt/->raw (insert :lwt
+                                                                  (values [[:id 0]
+                                                                           [:value v]])
+                                                                  (if-exists false))) {:consistency :one})]
                         (if (-> result' first ak)
                           (assoc op :type :ok)
                           (assoc op :type :fail)))))
                   (catch UnavailableException e
                     (assoc op :type :fail :error (.getMessage e)))
                   (catch ReadTimeoutException e
-                    (assoc op :type :info :value :read-timed-out))
+                    (assoc op :type :info :error :read-timed-out))
                   (catch WriteTimeoutException e
-                    (assoc op :type :info :value :write-timed-out))
+                    (assoc op :type :info :error :write-timed-out))
                   (catch NoHostAvailableException e
                     (info "All the servers are down - waiting 2s")
                     (Thread/sleep 2000)
                     (assoc op :type :fail :error (.getMessage e))))
-      :read (try (let [value (->> (with-consistency-level ConsistencyLevel/SERIAL
-                                    (cql/select conn "lwt"
-                                                (where [[= :id 0]])))
-                                  first :value)]
-                   (assoc op :type :ok :value value))
+      :read (try (let [v (->> (alia/execute session
+                                            (hayt/->raw (select :lwt (where [[= :id 0]])))
+                                            {:consistency :serial})
+                              first
+                              :value)]
+                   (assoc op :type :ok :value v))
                  (catch UnavailableException e
                    (info "Not enough replicas - failing")
-                   (assoc op :type :fail :value (.getMessage e)))
+                   (assoc op :type :fail :error (.getMessage e)))
                  (catch ReadTimeoutException e
-                   (assoc op :type :fail :value :timed-out))
+                   (assoc op :type :fail :error :timed-out))
                  (catch NoHostAvailableException e
                    (info "All the servers are down - waiting 2s")
                    (Thread/sleep 2000)
                    (assoc op :type :fail :error (.getMessage e))))))
-  (teardown! [_ _]
-    (info "Tearing down client with conn" conn)
-    (cassandra/disconnect! conn)))
+
+  (close! [_ _]
+    (alia/shutdown session))
+
+  (teardown! [_ _]))
 
 (defn cas-register-client
   "A CAS register implemented using LWT"
   []
-  (->CasRegisterClient nil))
+  (->CasRegisterClient (atom false) nil))
 
 (defn cas-register-test
   [name opts]
@@ -153,8 +161,10 @@
                                             :bootstrapper
                                             (gen/once {:type :info :f :bootstrapper}))
                                            gen/barrier))
-                          :checker (checker/compose
-                                    {:linear extra-checker/enhanced-linearizable})})
+                          :checker (checker/linearizable {:model     (model/cas-register)
+                                                          :algorithm :linear})})
+;                          :checker (checker/compose
+;                                    {:linear extra-checker/enhanced-linearizable})})
          opts))
 
 (def bridge-test
