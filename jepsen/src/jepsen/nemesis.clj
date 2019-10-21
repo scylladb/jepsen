@@ -6,30 +6,68 @@
             [jepsen.control     :as c]
             [jepsen.net         :as net]))
 
+(defprotocol Nemesis
+  (setup! [this test] "Set up the nemesis to work with the cluster. Returns the
+                      nemesis ready to be invoked")
+  (invoke! [this test op] "Apply an operation to the nemesis, which alters the
+                          cluster.")
+  (teardown! [this test] "Tear down the nemesis when work is complete"))
+
 (def noop
   "Does nothing."
-  (reify client/Client
-    (setup! [this test node] this)
+  (reify Nemesis
+    (setup! [this test] this)
     (invoke! [this test op] op)
     (teardown! [this test] this)))
 
-(defn snub-nodes!
-  "Drops all packets from the given nodes."
-  [test dest sources]
-  (->> sources (pmap #(net/drop! (:net test) test % dest)) dorun))
+(defn setup-compat!
+  "Calls `jepsen.nemesis/setup!`, if possible, falling back to
+  `jepsen.client/setup!`. Warns users that nemeses implementing `jepsen.client`
+  have been deprecated."
+  [nemesis test node]
+  (if (instance? jepsen.nemesis.Nemesis nemesis)
+    (try
+      (setup! nemesis test)
+      (catch AbstractMethodError e
+        nemesis))
+    (do (warn "DEPRECATED: Nemesis does not implement protocol `jepsen.nemesis/Nemesis`, calling `jepsen.client/setup!`. You should migrate to `jepsen.nemesis/Nemesis` to avoid compatibility issues. See the jepsen.nemesis documentation for details.")
+        (client/setup! nemesis test node))))
 
-(defn partition!
-  "Takes a *grudge*: a map of nodes to the collection of nodes they should
-  reject messages from, and makes the appropriate changes. Does not heal the
-  network first, so repeated calls to partition! are cumulative right now."
-  [test grudge]
-  (->> grudge
-       (map (fn [[node frenemies]]
-              (future
-                (snub-nodes! test node frenemies))))
-       doall
-       (map deref)
-       dorun))
+(defn invoke-compat!
+  "Calls `jepsen.nemesis/invoke!`, if possible, falling back to `jepsen.client/invoke!`."
+  [nemesis test op]
+  (if (instance? jepsen.nemesis.Nemesis nemesis)
+    (invoke! nemesis test op)
+    ;; DEPRECATED
+    (client/invoke! nemesis test op)))
+
+(defn teardown-compat!
+  "Calls `jepsen.nemesis/teardown!`, if possible, falling back to
+  `jepsen.client/teardown!`. Warns users that nemeses implementing
+  `jepsen.client` have been deprecated."
+  [nemesis test]
+  (if (instance? jepsen.nemesis.Nemesis nemesis)
+    (try (teardown! nemesis test)
+         (catch AbstractMethodError e
+           nemesis))
+    (do (warn "DEPRECATED: Nemesis does not implement protocol `jepsen.nemesis/Nemesis`, falling back to `jepsen.client/teardown!`. You should migrate to `jepsen.nemesis/Nemesis` to avoid compatibility issues. See the jepsen.nemesis documentation for details.")
+        (client/teardown! nemesis test))))
+
+(defn timeout
+  "Sometimes nemeses are unreliable. If you wrap them in this nemesis, it'll
+  time out their operations with the given timeout, in milliseconds. Timed out
+  operations have :value :timeout."
+  [timeout-ms nemesis]
+  (reify Nemesis
+    (setup! [this test]
+      (timeout timeout-ms (setup! nemesis test)))
+
+    (invoke! [this test op]
+      (util/timeout timeout-ms (assoc op :value :timeout)
+                    (invoke! nemesis test op)))
+
+    (teardown! [this test]
+      (teardown! nemesis test))))
 
 (defn bisect
   "Given a sequence, cuts it in half; smaller half first."
@@ -38,8 +76,9 @@
 
 (defn split-one
   "Split one node off from the rest"
-  [coll]
-  (let [loner (rand-nth coll)]
+  ([coll]
+   (split-one (rand-nth coll) coll))
+  ([loner coll]
     [[loner] (remove (fn [x] (= x loner)) coll)]))
 
 (defn complete-grudge
@@ -71,23 +110,26 @@
 
 (defn partitioner
   "Responds to a :start operation by cutting network links as defined by
-  (grudge nodes), and responds to :stop by healing the network."
-  [grudge]
-  (reify client/Client
-    (setup! [this test _]
-      (net/heal! (:net test) test)
-      this)
+  (grudge nodes), and responds to :stop by healing the network. The grudge to
+  apply is either taken from the :value of a :start op, or if that is nil, by
+  calling (grudge (:nodes test))"
+  ([] (partitioner nil))
+  ([grudge]
+   (reify Nemesis
+     (setup! [this test]
+       (net/heal! (:net test) test)
+       this)
 
-    (invoke! [this test op]
-      (case (:f op)
-        :start (let [grudge (grudge (:nodes test))]
-                 (partition! test grudge)
-                 (assoc op :value (str "Cut off " (pr-str grudge))))
-        :stop  (do (net/heal! (:net test) test)
-                   (assoc op :value "fully connected"))))
+     (invoke! [this test op]
+       (case (:f op)
+         :start (let [grudge (or (:value op) (grudge (:nodes test)))]
+                  (net/drop-all! test grudge)
+                  (assoc op :value [:isolated grudge]))
+         :stop  (do (net/heal! (:net test) test)
+                    (assoc op :value :network-healed))))
 
-    (teardown! [this test]
-      (net/heal! (:net test) test))))
+     (teardown! [this test]
+       (net/heal! (:net test) test)))))
 
 (defn partition-halves
   "Responds to a :start operation by cutting the network into two halves--first
@@ -119,7 +161,8 @@
          (partition m 1)        ; construct majorities
          (take n)               ; one per node
          (map (fn [majority]    ; invert into connections to *drop*
-                [(first majority) (set/difference U (set majority))]))
+                [(nth majority (Math/floor (/ (count majority) 2)))
+                 (set/difference U (set majority))]))
          (into {}))))
 
 (defn partition-majorities-ring
@@ -128,42 +171,67 @@
   []
   (partitioner majorities-ring))
 
-;(defn set-time!
-;  "Set the local node time in POSIX seconds."
-;  [t]
-;  (c/su (c/exec :date "+%s" :-s (str \@ (long t)))))
+(defn compose
+  "Takes a map of fs to nemeses and returns a single nemesis which, depending
+  on (:f op), routes to the appropriate child nemesis. `fs` should be a
+  function which takes (:f op) and returns either nil, if that nemesis should
+  not handle that :f, or a new :f, which replaces the op's :f, and the
+  resulting op is passed to the given nemesis. For instance:
+
+      (compose {#{:start :stop} (partition-random-halves)
+                #{:kill}        (process-killer)})
+
+  This routes `:kill` ops to process killer, and :start/:stop to the
+  partitioner. What if we had two partitioners which *both* take :start/:stop?
+
+      (compose {{:split-start :start
+                 :split-stop  :stop} (partition-random-halves)
+                {:ring-start  :start
+                 :ring-stop2  :stop} (partition-majorities-ring)})
+
+  We turn :split-start into :start, and pass that op to
+  partition-random-halves."
+  [nemeses]
+  (assert (map? nemeses))
+  (reify Nemesis
+    (setup! [this test]
+      (compose (util/map-vals #(setup-compat! % test nil) nemeses)))
+
+    (invoke! [this test op]
+      (let [f (:f op)]
+        (loop [nemeses nemeses]
+          (if-not (seq nemeses)
+            (throw (IllegalArgumentException.
+                     (str "no nemesis can handle " (:f op))))
+            (let [[fs nemesis] (first nemeses)]
+              (if-let [f' (fs f)]
+                (assoc (invoke-compat! nemesis test (assoc op :f f')) :f f)
+                (recur (next nemeses))))))))
+
+    (teardown! [this test]
+      (util/map-vals #(teardown-compat! % test) nemeses))))
 
 (defn set-time!
-  "Set the local node time skew (in seconds)"
+  "Set the local node time in POSIX seconds."
   [t]
-  (c/su (if (== 0 t)
-	  (c/exec :echo :-n "" :> "/root/.faketimerc")
-	  (if (> t 0)
-	    (c/exec :printf "+%ds" t :> "/root/.faketimerc")
-	    (c/exec :printf "%ds" t :> "/root/.faketimerc")))))
-
+  (c/su (c/exec :date "+%s" :-s (str \@ (long t)))))
 
 (defn clock-scrambler
   "Randomizes the system clock of all nodes within a dt-second window."
   [dt]
-  (reify client/Client
-    (setup! [this test _]
+  (reify Nemesis
+    (setup! [this test]
       this)
 
     (invoke! [this test op]
-      (assoc op :value  (case (:f op)
-                          :start (c/on-many (:nodes test)
-				   (let [node_time_shift (- (rand-int (* 2 dt)) dt)]
-                                     (set-time! node_time_shift)
-				     node_time_shift))
-                          :stop (c/on-many (:nodes test)
-                                   (let []
-				    (set-time! 0) 
-				    "0")))))
+      (assoc op :value
+             (c/with-test-nodes test
+               (set-time! (+ (/ (System/currentTimeMillis) 1000)
+                             (- (rand-int (* 2 dt)) dt))))))
 
     (teardown! [this test]
-      (c/on-many (:nodes test)
-                 (set-time! 0)))))
+      (c/with-test-nodes test
+        (set-time! (/ (System/currentTimeMillis) 1000))))))
 
 (defn node-start-stopper
   "Takes a targeting function which, given a list of nodes, returns a single
@@ -174,6 +242,9 @@
   the `jepsen.control` session to the given node, so you can just call `(c/exec
   ...)`.
 
+  The targeter can take either (targeter test nodes) or, if that fails,
+  (targeter nodes).
+
   Re-selects a fresh node (or nodes) for each start--if targeter returns nil,
   skips the start. The return values from the start and stop fns will become
   the :values of the returned :info operations from the nemesis, e.g.:
@@ -181,20 +252,26 @@
       {:value {:n1 [:killed \"java\"]}}"
   [targeter start! stop!]
   (let [nodes (atom nil)]
-    (reify client/Client
-      (setup! [this test _] this)
+    (reify Nemesis
+      (setup! [this test] this)
 
       (invoke! [this test op]
         (locking nodes
           (assoc op :type :info, :value
                  (case (:f op)
-                   :start (if-let [ns (-> test :nodes targeter util/coll)]
-                            (if (compare-and-set! nodes nil ns)
-                              (c/on-many ns (start! test (keyword c/*host*)))
-                              (str "nemesis already disrupting " @nodes))
-                            :no-target)
+                   :start (let [ns (:nodes test)
+                                ns (try (targeter test ns)
+                                        (catch clojure.lang.ArityException e
+                                          (targeter ns)))
+                                ns (util/coll ns)]
+                            (if ns
+                              (if (compare-and-set! nodes nil ns)
+                                (c/on-many ns (start! test c/*host*))
+                                (str "nemesis already disrupting "
+                                     (pr-str @nodes)))
+                              :no-target))
                    :stop (if-let [ns @nodes]
-                           (let [value (c/on-many ns (stop! test (keyword c/*host*)))]
+                           (let [value (c/on-many ns (stop! test c/*host*))]
                              (reset! nodes nil)
                              value)
                            :not-started)))))
@@ -216,3 +293,31 @@
                        (fn stop [t n]
                          (c/su (c/exec :killall :-s "CONT" process))
                          [:resumed process]))))
+
+(defn truncate-file
+  "A nemesis which responds to
+
+  {:f         :truncate
+   :value     {\"some-node\" {:file \"/path/to/file\"
+                              :drop 64}}}
+
+  where the value is a map of nodes to {:file, :drop} maps, on those nodes,
+  drops the last :drop bytes from the given file."
+  []
+  (reify Nemesis
+    (setup! [this test] this)
+
+    (invoke! [this test op]
+      (assert (= (:f op) :truncate))
+      (let [plan (:value op)]
+        (c/on-nodes test
+                    (keys plan)
+                    (fn [node]
+                      (let [{:keys [file drop]} (plan node)]
+                        (assert (string? file))
+                        (assert (integer? drop))
+                        (c/su
+                          (c/exec :truncate :-c :-s (str "-" drop) file))))))
+      op)
+
+    (teardown! [this test])))
