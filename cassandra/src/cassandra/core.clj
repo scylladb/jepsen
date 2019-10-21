@@ -1,7 +1,6 @@
 (ns cassandra.core
   (:require [clojure [pprint :refer :all]
              [string :as str]]
-            [clojure.java.io :as io]
             [clojure.java.jmx :as jmx]
             [clojure.set :as set]
             [clojure.tools.logging :refer [debug info warn]]
@@ -11,23 +10,21 @@
              [control   :as c :refer [| lit]]
              [client    :as client]
              [checker   :as checker]
-             [model     :as model]
              [generator :as gen]
              [nemesis   :as nemesis]
-             [store     :as store]
              [report    :as report]
              [tests     :as tests]]
-            [jepsen.checker.timeline :as timeline]
-            [jepsen.control [net :as net]
-             [util :as net/util]]
-            [jepsen.os.debian :as debian]
+            [jepsen.control [net :as net]]
+            [jepsen.os.centos :as centos]
             [knossos.core :as knossos]
-            [clojurewerkz.cassaforte.client :as cassandra]
-            [clojurewerkz.cassaforte.query :refer :all]
-            [clojurewerkz.cassaforte.policies :refer :all]
-            [clojurewerkz.cassaforte.cql :as cql])
+            [qbits.alia :as alia]
+            [qbits.hayt.dsl.clause :refer :all]
+            [qbits.hayt.dsl.statement :refer :all])
   (:import (clojure.lang ExceptionInfo)
-           (com.datastax.driver.core ConsistencyLevel)
+           (com.datastax.driver.core Session)
+           (com.datastax.driver.core Cluster)
+           (com.datastax.driver.core Metadata)
+           (com.datastax.driver.core Host)
            (com.datastax.driver.core.policies RetryPolicy
                                               RetryPolicy$RetryDecision)
            (java.net InetAddress)))
@@ -76,8 +73,13 @@
            (throw (RuntimeException.
                    (str "Driver didn't report all nodes were up in "
                         timeout-secs "s - failing")))
-           (while (->> (cassandra/get-hosts conn)
-                       (map :is-up) and not)
+           (while (->> conn
+                       .getCluster
+                       .getMetadata
+                       .getAllHosts
+                       (map #(.isUp %))
+                       and
+                       not)
              (Thread/sleep 500))))
 
 (defn dns-resolve
@@ -182,8 +184,8 @@
   [node test]
   (info node "configuring ScyllaDB")
   (c/su
-   (c/exec :cp :-f "/var/lib/scylla/conf/scylla.yaml.orig" "/var/lib/scylla/conf/scylla.yaml")
-   (doseq [rep (into ["\"s/cluster_name: .*/cluster_name: 'jepsen'/g\""
+   ;(c/exec :cp :-f "/var/lib/scylla/conf/scylla.yaml.orig" "/var/lib/scylla/conf/scylla.yaml")
+   (doseq [rep (into ["\"s/.?cluster_name: .*/cluster_name: 'jepsen'/g\""
                       "\"s/row_cache_size_in_mb: .*/row_cache_size_in_mb: 20/g\""
                       (str "\"s/seeds: .*/seeds: '" (dns-resolve :n1) "," (dns-resolve :n2) "'/g\"")
                       (str "\"s/listen_address: .*/listen_address: " (dns-resolve node)
@@ -207,18 +209,20 @@
                              "    - class_name: LZ4Compressor/g\"")]))]
      (c/exec :sed :-i (lit rep) "/var/lib/scylla/conf/scylla.yaml"))
 ;   (c/exec :sed :-i (lit "\"s/INFO/DEBUG/g\"") "~/cassandra/conf/logback.xml")
-   (c/exec :echo (str "auto_bootstrap: " (-> test :bootstrap deref node boolean))
-           :>> "/var/lib/scylla/conf/scylla.yaml")))
+   (c/exec :echo (str "auto_bootstrap: "  true) ;(-> test :bootstrap deref node boolean))
+           :>> "/var/lib/scylla/conf/scylla.yaml")
+           ))
 
 (defn start!
   "Starts ScyllaDB"
   [node test]
   (info node "starting ScyllaDB")
   (c/su
-    (nemesis/set-time! 0)
-;   (c/exec :service :scylla-server :start)
-    (c/exec "/root/scylla-run.sh" :--log-to-syslog :0 :--log-to-stdout :1 :--default-log-level :trace :--network-stack :posix :-m :8G :--collectd :0 :--poll-mode :--developer-mode :1)
-    (c/exec :service :scylla-jmx :start)
+    ;(nemesis/set-time! 0)
+   (c/exec :supervisorctl :start :scylla)
+   (Thread/sleep 30000)
+   (c/exec :supervisorctl :start :scylla-jmx)
+   (Thread/sleep 30000)
    ))
 
 (defn guarded-start!
@@ -226,24 +230,21 @@
   through initial DB lifecycle or a bootstrap. It will not start decommissioned
   nodes."
   [node test]
-  (let [bootstrap (:bootstrap test)
-        decommission (:decommission test)]
-    (when-not (or (node @bootstrap) (->> node name dns-resolve (get decommission)))
-      (start! node test))))
+  (start! node test))
+;  (let [bootstrap (:bootstrap test)
+;        decommission (:decommission test)]
+;    (when-not (or (node @bootstrap) (->> node name dns-resolve (get decommission)))
+;      (start! node test))))
 
 (defn stop!
   "Stops ScyllaDB"
   [node]
   (info node "stopping ScyllaDB")
   (c/su
-;   (c/exec :service :scylla-server :stop)
-;   (c/exec :service :scylla-jmx :stop))
-   (meh (c/exec :service :scylla-jmx :stop))
-   (while (.contains (c/exec :ps :-ef) "java")
-     (Thread/sleep 100))
-   (meh (c/exec :killall :scylla))
-   (while (.contains (c/exec :ps :-ef) "scylla")
-     (Thread/sleep 100)))
+   (meh (c/exec :supervisorctl :stop :scylla-jmx))
+   (Thread/sleep 10000)
+   (meh (c/exec :supervisorctl :stop :scylla)))
+   (Thread/sleep 10000)
   (info node "has stopped ScyllaDB"))
 
 (defn wipe!
@@ -252,7 +253,8 @@
   (stop! node)
   (info node "deleting data files")
   (c/su
-   (meh (c/exec "/root/wipe.sh"))))
+   (meh (c/exec :rm :-r "/var/lib/scylla/data/*"))
+   (meh (c/exec :rm :-r "/var/lib/scylla/commitlog/*"))))
 
 (defn db
   "New ScyllaDB run"
@@ -270,9 +272,9 @@
       (when-not (seq (System/getenv "LEAVE_CLUSTER_RUNNING"))
           (wipe! node)))
 
-    db/LogFiles
-    (log-files [db test node]
-      ["/var/lib/scylla/system.log"])
+    ;db/LogFiles
+    ;(log-files [db test node]
+    ;  ["/var/lib/scylla/system.log"])
       ))
 
 (defn recover
@@ -416,7 +418,7 @@
   [name opts]
   (merge tests/noop-test
          {:name    (str "cassandra " name)
-          :os      debian/os
+          :os      centos/os
           :db      (db "2.1.8")
           :bootstrap (atom #{})
           :decommission (atom #{})}
