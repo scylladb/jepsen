@@ -3,13 +3,12 @@
   :url "http://github.com/riptano/jepsen"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
-  :dependencies [[org.clojure/clojure "1.7.0"]
+  :dependencies [[org.clojure/clojure "1.10.0"]
                  [org.clojure/java.jmx "0.3.1"]
-                 [jkni/jepsen "0.0.7-SNAPSHOT"]
-                 [clojurewerkz/cassaforte "2.1.0-beta1"]
+                 [jepsen "0.1.16-SNAPSHOT" :exclusions [org.slf4j/slf4j-api]]
+                 [cc.qbits/alia "4.3.1"]
+                 [cc.qbits/hayt "4.1.0"]
                  [com.codahale.metrics/metrics-core "3.0.2"]]
-  :profiles {:dev {:plugins [[test2junit "1.1.1"]]}
-             :trunk {:dependencies [[clojurewerkz/cassaforte "trunk-SNAPSHOT"]]}}
   :test-selectors {:steady :steady
                    :bootstrap :bootstrap
                    :map :map
