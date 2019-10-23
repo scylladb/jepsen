@@ -1,10 +1,7 @@
 (ns cassandra.lwt-test
   (:require [clojure.test :refer :all]
-            [clojure.pprint :refer [pprint]]
             [cassandra.lwt :refer :all]
-            [cassandra.core-test :refer :all]
-            [jepsen [core :as jepsen]
-             [report :as report]]))
+            [cassandra.core-test :refer :all]))
 
 
 ;; Steady state cluster tests                              

@@ -44,7 +44,7 @@
                                                         (column-definitions {:id    :int
                                                                              :value :int
                                                                              :primary-key [:id]})
-                                                        (with {:compaction {:class compaction-strategy}})))))))
+                                                        (with {:compaction {:class (compaction-strategy)}})))))))
 
   (invoke! [_ _ op]
     (alia/execute session (hayt/->raw (use-keyspace :jepsen_keyspace)))
@@ -52,9 +52,9 @@
       :cas (try (let [[old new] (:value op)
                       result (alia/execute session
                                            (hayt/->raw (update :lwt
-                                                   (set-columns {:value new})
-                                                   (where [[= :id 0]])
-                                                   (only-if [[:value old]]))))]
+                                                               (set-columns {:value new})
+                                                               (where [[= :id 0]])
+                                                               (only-if [[:value old]]))))]
                   (if (-> result first ak)
                     (assoc op :type :ok)
                     (assoc op :type :fail :error (-> result first :value))))
@@ -70,15 +70,15 @@
                   (assoc op :type :fail :error (.getMessage e))))
       :write (try (let [v (:value op)
                         result (alia/execute session (hayt/->raw (update :lwt
-                                                             (set-columns {:value v})
-                                                             (only-if [[:in :value (range 5)]])
-                                                             (where [[= :id 0]]))))]
+                                                                         (set-columns {:value v})
+                                                                         (only-if [[:in :value (range 5)]])
+                                                                         (where [[= :id 0]]))))]
                     (if (-> result first ak)
                       (assoc op :type :ok)
                       (let [result' (alia/execute session (hayt/->raw (insert :lwt
-                                                                  (values [[:id 0]
-                                                                           [:value v]])
-                                                                  (if-exists false))))]
+                                                                              (values [[:id 0]
+                                                                                       [:value v]])
+                                                                              (if-exists false))))]
                         (if (-> result' first ak)
                           (assoc op :type :ok)
                           (assoc op :type :fail)))))
@@ -133,8 +133,7 @@
                                                       [(gen/sleep 5)
                                                        {:type :info :f :stop}
                                                        (gen/sleep 10)
-                                                       {:type :info :f :start}
-                                                       ])))
+                                                       {:type :info :f :start}])))
                                            (bootstrap 2)
                                            (gen/conductor
                                             :decommissioner
@@ -149,8 +148,6 @@
                                            gen/barrier))
                           :checker (checker/linearizable {:model     (model/cas-register)
                                                           :algorithm :linear})})
-;                          :checker (checker/compose
-;                                    {:linear extra-checker/enhanced-linearizable})})
          opts))
 
 (def bridge-test
@@ -171,7 +168,7 @@
 
 (def flush-compact-test
   (cas-register-test "flush and compact"
-                  {:conductors {:nemesis (conductors/flush-and-compacter)}}))
+                     {:conductors {:nemesis (conductors/flush-and-compacter)}}))
 
 (def clock-drift-test
   (cas-register-test "clock drift"
