@@ -260,17 +260,17 @@
   "New ScyllaDB run"
   [version]
   (reify db/DB
-    (setup! [_ test node]
-      (when (seq (System/getenv "LEAVE_CLUSTER_RUNNING"))
-        (wipe! node))
-      (doto node
-        (install! version)
-        (configure! test)
-        (guarded-start! test)))
+    (setup! [_ test node])
+    ;  (when (seq (System/getenv "LEAVE_CLUSTER_RUNNING"))
+    ;    (wipe! node))
+    ;  (doto node
+    ;    (install! version)
+    ;    (configure! test)
+    ;    (guarded-start! test)))
 
-    (teardown! [_ test node]
-      (when-not (seq (System/getenv "LEAVE_CLUSTER_RUNNING"))
-          (wipe! node)))
+    (teardown! [_ test node])
+    ;  (when-not (seq (System/getenv "LEAVE_CLUSTER_RUNNING"))
+    ;      (wipe! node)))
 
     ;db/LogFiles
     ;(log-files [db test node]
