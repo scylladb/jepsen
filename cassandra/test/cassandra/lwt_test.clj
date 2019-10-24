@@ -3,7 +3,6 @@
             [cassandra.lwt :refer :all]
             [cassandra.core-test :refer :all]))
 
-
 ;; Steady state cluster tests
 (deftest ^:lwt ^:steady lwt-bridge
   (run-test! bridge-test))
