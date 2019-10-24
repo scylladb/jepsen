@@ -12,9 +12,7 @@
             [cassandra.core :refer :all]
             [cassandra.conductors :as conductors]
             [qbits.alia :as alia]
-            [qbits.hayt :as hayt]
-            [qbits.hayt.dsl.clause :refer :all]
-            [qbits.hayt.dsl.statement :refer :all])
+            [qbits.hayt :refer :all])
   (:import (clojure.lang ExceptionInfo)
            (com.datastax.driver.core.exceptions UnavailableException
                                                 WriteTimeoutException
@@ -32,21 +30,21 @@
   (setup! [_ test]
     (locking tbl-created?
       (when (compare-and-set! tbl-created? false true)
-        (alia/execute session (hayt/->raw (create-keyspace :jepsen_keyspace
-                                                           (if-exists false)
-                                                           (with {:replication {:class :SimpleStrategy
-                                                                                :replication_factor 3}}))))
-        (alia/execute session (hayt/->raw (use-keyspace :jepsen_keyspace)))
-        (alia/execute session (hayt/->raw (create-table :bat
-                                                        (if-exists false)
-                                                        (column-definitions {:pid    :int
-                                                                             :cid    :int
-                                                                             :value  :int
-                                                                             :primary-key [:pid :cid]})
-                                                        (with {:compaction {:class (compaction-strategy)}})))))))
+        (alia/execute session (create-keyspace :jepsen_keyspace
+                                               (if-exists false)
+                                               (with {:replication {:class :SimpleStrategy
+                                                                    :replication_factor 3}})))
+        (alia/execute session (use-keyspace :jepsen_keyspace))
+        (alia/execute session (create-table :bat
+                                            (if-exists false)
+                                            (column-definitions {:pid    :int
+                                                                 :cid    :int
+                                                                 :value  :int
+                                                                 :primary-key [:pid :cid]})
+                                            (with {:compaction {:class (compaction-strategy)}}))))))
 
   (invoke! [this test op]
-    (alia/execute session (hayt/->raw (use-keyspace :jepsen_keyspace)))
+    (alia/execute session (use-keyspace :jepsen_keyspace))
 
     (case (:f op)
       :add (try (let [value (:value op)]
@@ -68,8 +66,8 @@
                   (Thread/sleep 2000)
                   (assoc op :type :fail :value (.getMessage e))))
       :read (try (let [results (alia/execute session
-                                             (hayt/->raw (select :bat
-                                                         {:consistency :all})))
+                                             (select :bat
+                                                     {:consistency :all}))
                        value-a (->> results
                                     (filter (fn [ret] (= (:cid ret) 0)))
                                     (map :value)
