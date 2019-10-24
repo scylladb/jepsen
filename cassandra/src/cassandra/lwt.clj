@@ -120,7 +120,6 @@
   [name opts]
   (merge (cassandra-test (str "lwt register " name)
                          {:client (cas-register-client)
-                          :model (model/cas-register)
                           :generator (gen/phases
                                       (->> [r w cas cas cas]
                                            gen/mix

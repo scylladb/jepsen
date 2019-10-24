@@ -8,7 +8,6 @@
              [checker   :as checker]
              [generator :as gen]
              [nemesis   :as nemesis]]
-            [knossos [model :as model]]
             [cassandra.core :refer :all]
             [cassandra.conductors :as conductors]
             [qbits.alia :as alia]
@@ -102,7 +101,6 @@
   [name opts]
   (merge (cassandra-test (str "batch set " name)
                          {:client (batch-set-client)
-                          :model (model/set)
                           :generator (gen/phases
                                       (->> (gen/clients (adds))
                                            (gen/delay 1)
