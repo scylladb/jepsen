@@ -1,6 +1,7 @@
 (ns scylla.core
   (:require [clojure [pprint :refer :all]
              [string :as str]]
+            [clojure.java.io :as io]
             [clojure.java.jmx :as jmx]
             [clojure.set :as set]
             [clojure.tools.logging :refer [debug info warn]]
@@ -9,14 +10,11 @@
              [util      :as util :refer [meh timeout]]
              [control   :as c :refer [| lit]]
              [client    :as client]
-             [checker   :as checker]
              [generator :as gen]
              [nemesis   :as nemesis]
-             [report    :as report]
              [tests     :as tests]]
             [jepsen.control [net :as net]]
-            [jepsen.os.centos :as centos]
-            [knossos.core :as knossos]
+            [jepsen.os.debian :as debian]
             [qbits.alia :as alia]
             [qbits.hayt.dsl.clause :refer :all]
             [qbits.hayt.dsl.statement :refer :all])
@@ -150,34 +148,45 @@
   "Installs ScyllaDB on the given node."
   [node version]
   (c/su
-;   (c/cd
-;    "/tmp"
-;    (let [tpath (System/getenv "CASSANDRA_TARBALL_PATH")]
-;          url (or tpath
-;                  (System/getenv "CASSANDRA_TARBALL_URL")
-;                  (str "http://www.us.apache.org/dist/cassandra/" version
-;                       "/apache-cassandra-" version "-bin.tar.gz"))]
-;      (info node "installing ScyllaDB from" tpath)
-;       (if (cached-install? url)
-;        (info "Used cached install on node" node)
-;        (do (if tpath
-;              (c/upload tpath "/tmp/scylladb.tar.gz")
-;              (c/exec :wget :-O "cassandra.tar.gz" url (lit ";")))
-;            (c/exec :tar :xzvf "scylladb.tar.gz" :-C "~")
-;            (c/exec :rm :-r :-f (lit "~/scylladb"))
-;            (c/exec :mv (lit "~/apache* ~/cassandra"))
-;            (c/exec :echo url :> (lit ".download"))))
-;    (c/exec
-;     :echo
-;     "deb  http://s3.amazonaws.com/downloads.scylladb.com/deb/ubuntu trusty/scylladb multiverse"
-;     :>"/etc/apt/sources.list.d/scylla.list")
-;    (c/exec
-;     :apt-get :update)
-;    (c/exec
-;     :apt-get :install :-y :--force-yes :scylla-server :scylla-jmx :scylla-tools)
+   (c/cd
+    "/tmp"
+    (let [tpath (System/getenv "CASSANDRA_TARBALL_PATH")
+          url (or tpath
+                  (System/getenv "CASSANDRA_TARBALL_URL")
+                  (str "http://www.us.apache.org/dist/cassandra/" version
+                       "/apache-cassandra-" version "-bin.tar.gz"))]
+      (info node "installing ScyllaDB from" tpath)
+       ;(if (cached-install? url)
+       ; (info "Used cached install on node" node)
+       ; (do (if tpath
+       ;       (c/upload tpath "/tmp/scylladb.tar.gz")
+       ;       (c/exec :wget :-O "cassandra.tar.gz" url (lit ";")))
+       ;     (c/exec :tar :xzvf "scylladb.tar.gz" :-C "~")
+       ;     (c/exec :rm :-r :-f (lit "~/scylladb"))
+       ;     (c/exec :mv (lit "~/apache* ~/cassandra"))
+       ;     (c/exec :echo url :> (lit ".download"))))
+      (c/exec :wget :-O "/etc/apt/sources.list.d/scylla.list"
+              (str "http://downloads.scylladb.com.s3.amazonaws.com/deb/debian/scylla-"
+                   version "-stretch.list"))
+      (c/exec
+       :apt-get :update)
+      (c/exec
+       :apt-get :install :-y :--force-yes :scylla-server :scylla-jmx :scylla-tools)
+      (info node "restarting rsyslog service")
+      (c/su
+       (c/exec :mkdir :-p (lit "/var/log/scylla"))
+       (c/exec :install :-o :root :-g :adm :-m :0640 (lit "/dev/null") (lit "/var/log/scylla/scylla.log"))
+       (c/exec :echo
+               ":syslogtag, startswith, \"scylla\" /var/log/scylla/scylla.log\n& ~" :> (lit "/etc/rsyslog.d/10-scylla.conf"))
+       (c/exec :service :rsyslog :restart))
+      (info node "copy scylla start script to node")
+      (c/su
+       (c/exec :echo (slurp (io/resource "start-scylla.sh"))
+               :> "/start-scylla.sh")
+       (c/exec :chmod :+x "/start-scylla.sh"))
 ;    (c/exec
 ;     :cp :-f "/var/lib/scylla/conf/scylla.yaml" "/var/lib/scylla/conf/scylla.yaml.orig")
-     ))
+      ))))
 
 (defn configure!
   "Uploads configuration files to the given node."
@@ -185,7 +194,7 @@
   (info node "configuring ScyllaDB")
   (c/su
    ;(c/exec :cp :-f "/var/lib/scylla/conf/scylla.yaml.orig" "/var/lib/scylla/conf/scylla.yaml")
-   (doseq [rep (into ["\"s/.?cluster_name: .*/cluster_name: 'jepsen'/g\""
+   (doseq [rep (into ["\"s/.*cluster_name: .*/cluster_name: 'jepsen'/g\""
                       "\"s/row_cache_size_in_mb: .*/row_cache_size_in_mb: 20/g\""
                       (str "\"s/seeds: .*/seeds: '" (dns-resolve :n1) "," (dns-resolve :n2) "'/g\"")
                       (str "\"s/listen_address: .*/listen_address: " (dns-resolve node)
@@ -207,30 +216,31 @@
                        ["\"s/#commitlog_compression.*/commitlog_compression:/g\""
                         (str "\"s/#   - class_name: LZ4Compressor/"
                              "    - class_name: LZ4Compressor/g\"")]))]
-     (c/exec :sed :-i (lit rep) "/var/lib/scylla/conf/scylla.yaml"))
+     (c/exec :sed :-i (lit rep) "/etc/scylla/scylla.yaml"))
 ;   (c/exec :sed :-i (lit "\"s/INFO/DEBUG/g\"") "~/cassandra/conf/logback.xml")
    (c/exec :echo (str "auto_bootstrap: "  true) ;(-> test :bootstrap deref node boolean))
-           :>> "/var/lib/scylla/conf/scylla.yaml")
-           ))
+           :>> "/etc/scylla/scylla.yaml")))
 
 (defn start!
   "Starts ScyllaDB"
   [node test]
   (info node "starting ScyllaDB")
-  (c/su
     ;(nemesis/set-time! 0)
-   (c/exec :supervisorctl :start :scylla)
-   (Thread/sleep 30000)
-   (c/exec :supervisorctl :start :scylla-jmx)
-   (Thread/sleep 30000)
-   ))
+  (c/su
+   ;(c/exec "/start-scylla.sh")
+   (c/exec :bash "/start-scylla.sh")
+   (Thread/sleep 60000)
+   (info node "started ScyllaDB")))
 
 (defn guarded-start!
   "Guarded start that only starts nodes that have joined the cluster already
   through initial DB lifecycle or a bootstrap. It will not start decommissioned
   nodes."
   [node test]
-  (start! node test))
+  (let [bootstrap (:bootstrap test)
+        decommission (:decommission test)]
+    (start! node test))
+  )
 ;  (let [bootstrap (:bootstrap test)
 ;        decommission (:decommission test)]
 ;    (when-not (or (node @bootstrap) (->> node name dns-resolve (get decommission)))
@@ -241,10 +251,10 @@
   [node]
   (info node "stopping ScyllaDB")
   (c/su
-   (meh (c/exec :supervisorctl :stop :scylla-jmx))
+   (meh (c/exec :killall :-9 :java))
    (Thread/sleep 10000)
-   (meh (c/exec :supervisorctl :stop :scylla)))
-   (Thread/sleep 10000)
+   (meh (c/exec :killall :-9 :scylla)))
+  (Thread/sleep 10000)
   (info node "has stopped ScyllaDB"))
 
 (defn wipe!
@@ -253,29 +263,27 @@
   (stop! node)
   (info node "deleting data files")
   (c/su
-   (meh (c/exec :rm :-r "/var/lib/scylla/data/*"))
-   (meh (c/exec :rm :-r "/var/lib/scylla/commitlog/*"))))
+   (meh (c/exec :rm :-rf (lit "/var/lib/scylla/*")))))
 
 (defn db
   "New ScyllaDB run"
   [version]
   (reify db/DB
-    (setup! [_ test node])
-    ;  (when (seq (System/getenv "LEAVE_CLUSTER_RUNNING"))
-    ;    (wipe! node))
-    ;  (doto node
-    ;    (install! version)
-    ;    (configure! test)
-    ;    (guarded-start! test)))
+    (setup! [_ test node]
+      (when-not (seq (System/getenv "LEAVE_CLUSTER_RUNNING"))
+        (wipe! node))
+      (doto node
+        (install! version)
+        (configure! test)
+        (guarded-start! test)))
 
-    (teardown! [_ test node])
-    ;  (when-not (seq (System/getenv "LEAVE_CLUSTER_RUNNING"))
-    ;      (wipe! node)))
+    (teardown! [_ test node]
+      (when-not (seq (System/getenv "LEAVE_CLUSTER_RUNNING"))
+        (wipe! node)))
 
-    ;db/LogFiles
-    ;(log-files [db test node]
-    ;  ["/var/lib/scylla/system.log"])
-      ))
+    db/LogFiles
+    (log-files [db test node]
+      ["/var/log/scylla/scylla.log"])))
 
 (defn recover
   "A generator which stops the nemesis and allows some time for recovery."
@@ -418,8 +426,8 @@
   [name opts]
   (merge tests/noop-test
          {:name    (str "scylla " name)
-          :os      centos/os
-          :db      (db "2.1.8")
+          :os      debian/os
+          :db      (db "3.1")
           :bootstrap (atom #{})
           :decommission (atom #{})}
          opts))
