@@ -1,8 +1,7 @@
 (ns scylla.collections.map-test
   (:require [clojure.test :refer :all]
             [scylla.collections.map :refer :all]
-            [scylla.core-test :refer :all]
-            [jepsen [core :as jepsen]]))
+            [scylla.core-test :refer :all]))
 
 (deftest ^:map ^:steady cql-map-bridge
   (run-test! bridge-test))

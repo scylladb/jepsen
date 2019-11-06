@@ -4,8 +4,8 @@
             [clojure.java.io :as io]
             [clojure.java.jmx :as jmx]
             [clojure.set :as set]
-            [clojure.tools.logging :refer [debug info warn]]
-            [jepsen [core      :as jepsen]
+            [clojure.tools.logging :refer [info]]
+            [jepsen
              [db        :as db]
              [util      :as util :refer [meh timeout]]
              [control   :as c :refer [| lit]]
@@ -14,10 +14,7 @@
              [nemesis   :as nemesis]
              [tests     :as tests]]
             [jepsen.control [net :as net]]
-            [jepsen.os.debian :as debian]
-            [qbits.alia :as alia]
-            [qbits.hayt.dsl.clause :refer :all]
-            [qbits.hayt.dsl.statement :refer :all])
+            [jepsen.os.debian :as debian])
   (:import (clojure.lang ExceptionInfo)
            (com.datastax.driver.core Session)
            (com.datastax.driver.core Cluster)
@@ -45,7 +42,7 @@
 (defn compressed-commitlog?
   "Returns whether to use commitlog compression"
   []
-  (= (some-> (System/getenv "JEPSEN_COMMITLOG_COMPRESSION") (clojure.string/lower-case))
+  (= (some-> (System/getenv "JEPSEN_COMMITLOG_COMPRESSION") (str/lower-case))
      "false"))
 
 (defn coordinator-batchlog-disabled?
@@ -92,7 +89,7 @@
                (try (jmx/with-connection {:host (name node) :port 7199}
                       (jmx/read "org.apache.cassandra.db:type=StorageService"
                                 :LiveNodes))
-                    (catch Exception e
+                    (catch Exception _
                       (info "Couldn't get status from node" node))))
              (-> test :nodes set (set/difference @(:bootstrap test))
                  (#(map (comp dns-resolve name) %)) set (set/difference @(:decommission test))
@@ -105,7 +102,7 @@
                  (try (jmx/with-connection {:host (name node) :port 7199}
                         (jmx/read "org.apache.cassandra.db:type=StorageService"
                                   :JoiningNodes))
-                      (catch Exception e
+                      (catch Exception _
                         (info "Couldn't get status from node" node))))
                (-> test :nodes set (set/difference @(:bootstrap test))
                    (#(map (comp dns-resolve name) %)) set (set/difference @(:decommission test))
@@ -156,18 +153,9 @@
                   (str "http://www.us.apache.org/dist/cassandra/" version
                        "/apache-cassandra-" version "-bin.tar.gz"))]
       (info node "installing ScyllaDB from" tpath)
-       ;(if (cached-install? url)
-       ; (info "Used cached install on node" node)
-       ; (do (if tpath
-       ;       (c/upload tpath "/tmp/scylladb.tar.gz")
-       ;       (c/exec :wget :-O "cassandra.tar.gz" url (lit ";")))
-       ;     (c/exec :tar :xzvf "scylladb.tar.gz" :-C "~")
-       ;     (c/exec :rm :-r :-f (lit "~/scylladb"))
-       ;     (c/exec :mv (lit "~/apache* ~/cassandra"))
-       ;     (c/exec :echo url :> (lit ".download"))))
       (c/exec :wget :-O "/etc/apt/sources.list.d/scylla.list"
               (str "http://downloads.scylladb.com.s3.amazonaws.com/deb/debian/scylla-"
-                   version "-stretch.list"))
+              version "-stretch.list"))
       (c/exec
        :apt-get :update)
       (c/exec
@@ -184,16 +172,13 @@
        (c/exec :echo (slurp (io/resource "start-scylla.sh"))
                :> "/start-scylla.sh")
        (c/exec :chmod :+x "/start-scylla.sh"))
-;    (c/exec
-;     :cp :-f "/var/lib/scylla/conf/scylla.yaml" "/var/lib/scylla/conf/scylla.yaml.orig")
       ))))
 
 (defn configure!
   "Uploads configuration files to the given node."
-  [node test]
+  [node _]
   (info node "configuring ScyllaDB")
   (c/su
-   ;(c/exec :cp :-f "/var/lib/scylla/conf/scylla.yaml.orig" "/var/lib/scylla/conf/scylla.yaml")
    (doseq [rep (into ["\"s/.*cluster_name: .*/cluster_name: 'jepsen'/g\""
                       "\"s/row_cache_size_in_mb: .*/row_cache_size_in_mb: 20/g\""
                       (str "\"s/seeds: .*/seeds: '" (dns-resolve :n1) "," (dns-resolve :n2) "'/g\"")
@@ -217,20 +202,18 @@
                         (str "\"s/#   - class_name: LZ4Compressor/"
                              "    - class_name: LZ4Compressor/g\"")]))]
      (c/exec :sed :-i (lit rep) "/etc/scylla/scylla.yaml"))
-;   (c/exec :sed :-i (lit "\"s/INFO/DEBUG/g\"") "~/cassandra/conf/logback.xml")
-   (c/exec :echo (str "auto_bootstrap: "  true) ;(-> test :bootstrap deref node boolean))
+   (c/exec :echo (str "auto_bootstrap: "  true)
            :>> "/etc/scylla/scylla.yaml")))
 
 (defn start!
   "Starts ScyllaDB"
-  [node test]
+  [node _]
   (info node "starting ScyllaDB")
     ;(nemesis/set-time! 0)
   (c/su
-   ;(c/exec "/start-scylla.sh")
-   (c/exec :bash "/start-scylla.sh")
-   (Thread/sleep 60000)
-   (info node "started ScyllaDB")))
+   (c/exec "/start-scylla.sh")
+   (Thread/sleep 120000))
+  (info node "started ScyllaDB"))
 
 (defn guarded-start!
   "Guarded start that only starts nodes that have joined the cluster already
@@ -239,22 +222,20 @@
   [node test]
   (let [bootstrap (:bootstrap test)
         decommission (:decommission test)]
-    (start! node test))
-  )
-;  (let [bootstrap (:bootstrap test)
-;        decommission (:decommission test)]
-;    (when-not (or (node @bootstrap) (->> node name dns-resolve (get decommission)))
-;      (start! node test))))
+    (when-not (or (contains? @bootstrap node) (->> node name dns-resolve (get decommission)))
+      (start! node test))))
 
 (defn stop!
   "Stops ScyllaDB"
   [node]
   (info node "stopping ScyllaDB")
   (c/su
-   (meh (c/exec :killall :-9 :java))
-   (Thread/sleep 10000)
-   (meh (c/exec :killall :-9 :scylla)))
-  (Thread/sleep 10000)
+   (meh (c/exec :killall :scylla-jmx))
+   (while (str/includes? (c/exec :ps :-ef) "scylla-jmx")
+     (Thread/sleep 100))
+   (meh (c/exec :killall :scylla))
+   (while (str/includes? (c/exec :ps :-ef) "scylla")
+     (Thread/sleep 100)))
   (info node "has stopped ScyllaDB"))
 
 (defn wipe!
@@ -419,7 +400,9 @@
   []
   (test-aware-node-start-stopper
    safe-mostly-small-nonempty-subset
-   (fn start [test node] (meh (c/su (c/exec :killall :-9 :java))) [:killed node])
+   (fn start [_ node]
+     (meh (c/su (c/exec :killall :-9 :scylla-jmx)))
+     (meh (c/su (c/exec :killall :-9 :scylla))) [:killed node])
    (fn stop  [test node] (meh (guarded-start! node test)) [:restarted node])))
 
 (defn scylla-test

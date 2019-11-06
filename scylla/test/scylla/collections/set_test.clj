@@ -1,10 +1,7 @@
 (ns scylla.collections.set-test
   (:require [clojure.test :refer :all]
-            [clojure.pprint :refer [pprint]]
             [scylla.collections.set :refer :all]
-            [scylla.core-test :refer :all]
-            [jepsen [core :as jepsen]
-             [report :as report]]))
+            [scylla.core-test :refer :all]))
 
 (deftest ^:set ^:steady cql-set-bridge
   (run-test! bridge-test))

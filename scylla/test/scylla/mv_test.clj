@@ -1,10 +1,7 @@
 (ns scylla.mv-test
   (:require [clojure.test :refer :all]
-            [clojure.pprint :refer [pprint]]
             [scylla.mv :refer :all]
-            [scylla.core-test :refer :all]
-            [jepsen [core :as jepsen]
-             [report :as report]]))
+            [scylla.core-test :refer :all]))
 
 
 ;; Steady state cluster tests

@@ -1,8 +1,7 @@
 (ns scylla.counter
-  (:require [clojure [pprint :refer :all]
-             [string :as str]]
-            [clojure.tools.logging :refer [debug info warn]]
-            [jepsen [core      :as jepsen]
+  (:require [clojure [pprint :refer :all]]
+            [clojure.tools.logging :refer [info]]
+            [jepsen
              [client    :as client]
              [checker   :as checker]
              [nemesis   :as nemesis]

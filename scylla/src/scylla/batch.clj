@@ -1,9 +1,7 @@
 (ns scylla.batch
-  (:require [clojure [pprint :refer :all]
-             [string :as str]
-             [set :as set]]
-            [clojure.tools.logging :refer [debug info warn]]
-            [jepsen [core      :as jepsen]
+  (:require [clojure [pprint :refer :all]]
+            [clojure.tools.logging :refer [info]]
+            [jepsen
              [client    :as client]
              [checker   :as checker]
              [generator :as gen]

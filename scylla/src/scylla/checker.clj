@@ -1,8 +1,5 @@
 (ns scylla.checker
   (:require [clojure.core.reducers :as r]
-           [clojure.tools.logging :refer [debug info warn]]
-           [jepsen.checker.perf :as latency]
-           [knossos.model :as model]
            [knossos.core :as knossos])
   (:import jepsen.checker.Checker))
 

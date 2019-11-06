@@ -1,9 +1,7 @@
 (ns scylla.core-test
   (:require [clojure.test :refer :all]
-            [clojure.pprint :refer [pprint]]
             [scylla.core :refer :all]
-            [jepsen [core :as jepsen]
-             [report :as report]]))
+            [jepsen [core :as jepsen]]))
 
 (defn run-test!
   [test]

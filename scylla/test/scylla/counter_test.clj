@@ -1,8 +1,7 @@
 (ns scylla.counter-test
   (:require [clojure.test :refer :all]
             [scylla.counter :refer :all]
-            [scylla.core-test :refer :all]
-            [jepsen [core :as jepsen]]))
+            [scylla.core-test :refer :all]))
 
 
 ;; Regular tests without cluster composition changes
