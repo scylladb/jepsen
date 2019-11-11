@@ -138,79 +138,79 @@
 ;; Uncontended tests
 (def bridge-test
   (mv-map-test "bridge"
-               {:conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))}}))
+               {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))}))
 
 (def halves-test
   (mv-map-test "halves"
-               {:conductors {:nemesis (nemesis/partition-random-halves)}}))
+               {:nemesis (nemesis/partition-random-halves)}))
 
 (def isolate-node-test
   (mv-map-test "isolate node"
-               {:conductors {:nemesis (nemesis/partition-random-node)}}))
+               {:nemesis (nemesis/partition-random-node)}))
 
 (def crash-subset-test
   (mv-map-test "crash"
-               {:conductors {:nemesis (crash-nemesis)}}))
+               {:nemesis (crash-nemesis)}))
 
 (def clock-drift-test
   (mv-map-test "clock drift"
-               {:conductors {:nemesis (nemesis/clock-scrambler 10000)}}))
+               {:nemesis (nemesis/clock-scrambler 10000)}))
 
 (def flush-compact-test
   (mv-map-test "flush and compact"
-               {:conductors {:nemesis (conductors/flush-and-compacter)}}))
+               {:nemesis (conductors/flush-and-compacter)}))
 
-(def bridge-test-bootstrap
-  (mv-map-test "bridge bootstrap"
-               {:bootstrap (atom #{:n4 :n5})
-                :conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))
-                             :bootstrapper (conductors/bootstrapper)}}))
-
-(def halves-test-bootstrap
-  (mv-map-test "halves bootstrap"
-               {:bootstrap (atom #{:n4 :n5})
-                :conductors {:nemesis (nemesis/partition-random-halves)
-                             :bootstrapper (conductors/bootstrapper)}}))
-
-(def isolate-node-test-bootstrap
-  (mv-map-test "isolate node bootstrap"
-               {:bootstrap (atom #{:n4 :n5})
-                :conductors {:nemesis (nemesis/partition-random-node)
-                             :bootstrapper (conductors/bootstrapper)}}))
-
-(def crash-subset-test-bootstrap
-  (mv-map-test "crash bootstrap"
-               {:bootstrap (atom #{:n4 :n5})
-                :conductors {:nemesis (crash-nemesis)
-                             :bootstrapper (conductors/bootstrapper)}}))
-
-(def clock-drift-test-bootstrap
-  (mv-map-test "clock drift bootstrap"
-               {:bootstrap (atom #{:n4 :n5})
-                :conductors {:nemesis (nemesis/clock-scrambler 10000)
-                             :bootstrapper (conductors/bootstrapper)}}))
-
-(def bridge-test-decommission
-  (mv-map-test "bridge decommission"
-               {:conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))
-                             :decommissioner (conductors/decommissioner)}}))
-
-(def halves-test-decommission
-  (mv-map-test "halves decommission"
-               {:conductors {:nemesis (nemesis/partition-random-halves)
-                             :decommissioner (conductors/decommissioner)}}))
-
-(def isolate-node-test-decommission
-  (mv-map-test "isolate node decommission"
-               {:conductors {:nemesis (nemesis/partition-random-node)
-                             :decommissioner (conductors/decommissioner)}}))
-
-(def crash-subset-test-decommission
-  (mv-map-test "crash decommission"
-               {:conductors {:nemesis (crash-nemesis)
-                             :decommissioner (conductors/decommissioner)}}))
-
-(def clock-drift-test-decommission
-  (mv-map-test "clock drift decommission"
-               {:conductors {:nemesis (nemesis/clock-scrambler 10000)
-                             :decommissioner (conductors/decommissioner)}}))
+;(def bridge-test-bootstrap
+;  (mv-map-test "bridge bootstrap"
+;               {:bootstrap (atom #{:n4 :n5})
+;                :conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))
+;                             :bootstrapper (conductors/bootstrapper)}}))
+;
+;(def halves-test-bootstrap
+;  (mv-map-test "halves bootstrap"
+;               {:bootstrap (atom #{:n4 :n5})
+;                :conductors {:nemesis (nemesis/partition-random-halves)
+;                             :bootstrapper (conductors/bootstrapper)}}))
+;
+;(def isolate-node-test-bootstrap
+;  (mv-map-test "isolate node bootstrap"
+;               {:bootstrap (atom #{:n4 :n5})
+;                :conductors {:nemesis (nemesis/partition-random-node)
+;                             :bootstrapper (conductors/bootstrapper)}}))
+;
+;(def crash-subset-test-bootstrap
+;  (mv-map-test "crash bootstrap"
+;               {:bootstrap (atom #{:n4 :n5})
+;                :conductors {:nemesis (crash-nemesis)
+;                             :bootstrapper (conductors/bootstrapper)}}))
+;
+;(def clock-drift-test-bootstrap
+;  (mv-map-test "clock drift bootstrap"
+;               {:bootstrap (atom #{:n4 :n5})
+;                :conductors {:nemesis (nemesis/clock-scrambler 10000)
+;                             :bootstrapper (conductors/bootstrapper)}}))
+;
+;(def bridge-test-decommission
+;  (mv-map-test "bridge decommission"
+;               {:conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))
+;                             :decommissioner (conductors/decommissioner)}}))
+;
+;(def halves-test-decommission
+;  (mv-map-test "halves decommission"
+;               {:conductors {:nemesis (nemesis/partition-random-halves)
+;                             :decommissioner (conductors/decommissioner)}}))
+;
+;(def isolate-node-test-decommission
+;  (mv-map-test "isolate node decommission"
+;               {:conductors {:nemesis (nemesis/partition-random-node)
+;                             :decommissioner (conductors/decommissioner)}}))
+;
+;(def crash-subset-test-decommission
+;  (mv-map-test "crash decommission"
+;               {:conductors {:nemesis (crash-nemesis)
+;                             :decommissioner (conductors/decommissioner)}}))
+;
+;(def clock-drift-test-decommission
+;  (mv-map-test "clock drift decommission"
+;               {:conductors {:nemesis (nemesis/clock-scrambler 10000)
+;                             :decommissioner (conductors/decommissioner)}}))

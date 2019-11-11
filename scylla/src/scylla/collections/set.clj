@@ -107,65 +107,65 @@
 
 (def bridge-test
   (cql-set-test "bridge"
-                {:conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))}}))
+                {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))}))
 
 (def halves-test
   (cql-set-test "halves"
-                {:conductors {:nemesis (nemesis/partition-random-halves)}}))
+                {:nemesis (nemesis/partition-random-halves)}))
 
 (def isolate-node-test
   (cql-set-test "isolate node"
-                {:conductors {:nemesis (nemesis/partition-random-node)}}))
+                {:nemesis (nemesis/partition-random-node)}))
 
 (def crash-subset-test
   (cql-set-test "crash"
-                {:conductors {:nemesis (crash-nemesis)}}))
+                {:nemesis (crash-nemesis)}))
 
 (def flush-compact-test
   (cql-set-test "flush and compact"
-                {:conductors {:nemesis (conductors/flush-and-compacter)}}))
+                {:nemesis (conductors/flush-and-compacter)}))
 
-(def bridge-test-bootstrap
-  (cql-set-test "bridge bootstrap"
-                {:bootstrap (atom #{:n4 :n5})
-                 :conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))
-                              :bootstrapper (conductors/bootstrapper)}}))
-
-(def halves-test-bootstrap
-  (cql-set-test "halves bootstrap"
-                {:bootstrap (atom #{:n4 :n5})
-                 :conductors {:nemesis (nemesis/partition-random-halves)
-                              :bootstrapper (conductors/bootstrapper)}}))
-
-(def isolate-node-test-bootstrap
-  (cql-set-test "isolate node bootstrap"
-                {:bootstrap (atom #{:n4 :n5})
-                 :conductors {:nemesis (nemesis/partition-random-node)
-                              :bootstrapper (conductors/bootstrapper)}}))
-
-(def crash-subset-test-bootstrap
-  (cql-set-test "crash bootstrap"
-                {:bootstrap (atom #{:n4 :n5})
-                 :conductors {:nemesis (crash-nemesis)
-                              :bootstrapper (conductors/bootstrapper)}}))
-
-(def bridge-test-decommission
-  (cql-set-test "bridge decommission"
-                {:conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))
-                              :decommissioner (conductors/decommissioner)}}))
-
-(def halves-test-decommission
-  (cql-set-test "halves decommission"
-                {:conductors {:nemesis (nemesis/partition-random-halves)
-                              :decommissioner (conductors/decommissioner)}}))
-
-(def isolate-node-test-decommission
-  (cql-set-test "isolate node decommission"
-                {:conductors {:nemesis (nemesis/partition-random-node)
-                              :decommissioner (conductors/decommissioner)}}))
-
-(def crash-subset-test-decommission
-  (cql-set-test "crash decommission"
-                {:client (cql-set-client :quorum)
-                 :conductors {:nemesis (crash-nemesis)
-                              :decommissioner (conductors/decommissioner)}}))
+;(def bridge-test-bootstrap
+;  (cql-set-test "bridge bootstrap"
+;                {:bootstrap (atom #{:n4 :n5})
+;                 :conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))
+;                              :bootstrapper (conductors/bootstrapper)}}))
+;
+;(def halves-test-bootstrap
+;  (cql-set-test "halves bootstrap"
+;                {:bootstrap (atom #{:n4 :n5})
+;                 :conductors {:nemesis (nemesis/partition-random-halves)
+;                              :bootstrapper (conductors/bootstrapper)}}))
+;
+;(def isolate-node-test-bootstrap
+;  (cql-set-test "isolate node bootstrap"
+;                {:bootstrap (atom #{:n4 :n5})
+;                 :conductors {:nemesis (nemesis/partition-random-node)
+;                              :bootstrapper (conductors/bootstrapper)}}))
+;
+;(def crash-subset-test-bootstrap
+;  (cql-set-test "crash bootstrap"
+;                {:bootstrap (atom #{:n4 :n5})
+;                 :conductors {:nemesis (crash-nemesis)
+;                              :bootstrapper (conductors/bootstrapper)}}))
+;
+;(def bridge-test-decommission
+;  (cql-set-test "bridge decommission"
+;                {:conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))
+;                              :decommissioner (conductors/decommissioner)}}))
+;
+;(def halves-test-decommission
+;  (cql-set-test "halves decommission"
+;                {:conductors {:nemesis (nemesis/partition-random-halves)
+;                              :decommissioner (conductors/decommissioner)}}))
+;
+;(def isolate-node-test-decommission
+;  (cql-set-test "isolate node decommission"
+;                {:conductors {:nemesis (nemesis/partition-random-node)
+;                              :decommissioner (conductors/decommissioner)}}))
+;
+;(def crash-subset-test-decommission
+;  (cql-set-test "crash decommission"
+;                {:client (cql-set-client :quorum)
+;                 :conductors {:nemesis (crash-nemesis)
+;                              :decommissioner (conductors/decommissioner)}}))

@@ -401,9 +401,11 @@
   (test-aware-node-start-stopper
    safe-mostly-small-nonempty-subset
    (fn start [_ node]
-     (meh (c/su (c/exec :killall :-9 :scylla-jmx)))
-     (meh (c/su (c/exec :killall :-9 :scylla))) [:killed node])
-   (fn stop  [test node] (meh (guarded-start! node test)) [:restarted node])))
+     (info node "[crash nemesis] killing scylla and scylla-jmx")
+     (meh (c/su (c/exec :killall :-9 :scylla-jmx :scylla))) [:killed node])
+   (fn stop  [test node]
+     (info node "[crash nemesis] restarting scylla")
+     (meh (guarded-start! node test)) [:restarted node])))
 
 (defn scylla-test
   [name opts]

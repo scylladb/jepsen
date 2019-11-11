@@ -23,33 +23,33 @@
 ;  (run-test! clock-drift-test))
 
 ;; Bootstrapping tests
-(deftest ^:batch ^:bootstrap batch-bridge-bootstrap
-  (run-test! bridge-test-bootstrap))
-
-(deftest ^:batch ^:bootstrap batch-isolate-node-bootstrap
-  (run-test! isolate-node-test-bootstrap))
-
-(deftest ^:batch ^:bootstrap batch-halves-bootstrap
-  (run-test! halves-test-bootstrap))
-
-(deftest ^:batch ^:bootstrap batch-crash-subset-bootstrap
-  (run-test! crash-subset-test-bootstrap))
+;(deftest ^:batch ^:bootstrap batch-bridge-bootstrap
+;  (run-test! bridge-test-bootstrap))
+;
+;(deftest ^:batch ^:bootstrap batch-isolate-node-bootstrap
+;  (run-test! isolate-node-test-bootstrap))
+;
+;(deftest ^:batch ^:bootstrap batch-halves-bootstrap
+;  (run-test! halves-test-bootstrap))
+;
+;(deftest ^:batch ^:bootstrap batch-crash-subset-bootstrap
+;  (run-test! crash-subset-test-bootstrap))
 
 ;(deftest ^:clock batch-clock-drift-bootstrap
 ;  (run-test! clock-drift-test-bootstrap))
 
 ;; Decommission tests
-(deftest ^:batch ^:decommission batch-bridge-decommission
-  (run-test! bridge-test-decommission))
-
-(deftest ^:batch ^:decommission batch-isolate-node-decommission
-  (run-test! isolate-node-test-decommission))
-
-(deftest ^:batch ^:decommission batch-halves-decommission
-  (run-test! halves-test-decommission))
-
-(deftest ^:batch ^:decommission batch-crash-subset-decommission
-  (run-test! crash-subset-test-decommission))
+;(deftest ^:batch ^:decommission batch-bridge-decommission
+;  (run-test! bridge-test-decommission))
+;
+;(deftest ^:batch ^:decommission batch-isolate-node-decommission
+;  (run-test! isolate-node-test-decommission))
+;
+;(deftest ^:batch ^:decommission batch-halves-decommission
+;  (run-test! halves-test-decommission))
+;
+;(deftest ^:batch ^:decommission batch-crash-subset-decommission
+;  (run-test! crash-subset-test-decommission))
 
 ;(deftest ^:clock batch-clock-drift-decommission
 ;  (run-test! clock-drift-test-decommission))

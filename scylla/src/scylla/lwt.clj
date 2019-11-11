@@ -148,79 +148,79 @@
 
 (def bridge-test
   (cas-register-test "bridge"
-                     {:conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))}}))
+                     {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))}))
 
 (def halves-test
   (cas-register-test "halves"
-                     {:conductors {:nemesis (nemesis/partition-random-halves)}}))
+                     {:nemesis (nemesis/partition-random-halves)}))
 
 (def isolate-node-test
   (cas-register-test "isolate node"
-                     {:conductors {:nemesis (nemesis/partition-random-node)}}))
+                     {:nemesis (nemesis/partition-random-node)}))
 
 (def crash-subset-test
   (cas-register-test "crash"
-                     {:conductors {:nemesis (crash-nemesis)}}))
+                     {:nemesis (crash-nemesis)}))
 
 (def flush-compact-test
   (cas-register-test "flush and compact"
-                     {:conductors {:nemesis (conductors/flush-and-compacter)}}))
+                     {:nemesis (conductors/flush-and-compacter)}))
 
 (def clock-drift-test
   (cas-register-test "clock drift"
-                     {:conductors {:nemesis (nemesis/clock-scrambler 10000)}}))
+                     {:nemesis (nemesis/clock-scrambler 10000)}))
 
-(def bridge-test-bootstrap
-  (cas-register-test "bridge bootstrap"
-                     {:bootstrap (atom #{:n4 :n5})
-                      :conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))
-                                   :bootstrapper (conductors/bootstrapper)}}))
-
-(def halves-test-bootstrap
-  (cas-register-test "halves bootstrap"
-                     {:bootstrap (atom #{:n4 :n5})
-                      :conductors {:nemesis (nemesis/partition-random-halves)
-                                   :bootstrapper (conductors/bootstrapper)}}))
-
-(def isolate-node-test-bootstrap
-  (cas-register-test "isolate node bootstrap"
-                     {:bootstrap (atom #{:n4 :n5})
-                      :conductors {:nemesis (nemesis/partition-random-node)
-                                   :bootstrapper (conductors/bootstrapper)}}))
-
-(def crash-subset-test-bootstrap
-  (cas-register-test "crash bootstrap"
-                     {:bootstrap (atom #{:n4 :n5})
-                      :conductors {:nemesis (crash-nemesis)
-                                   :bootstrapper (conductors/bootstrapper)}}))
-
-(def clock-drift-test-bootstrap
-  (cas-register-test "clock drift bootstrap"
-                     {:bootstrap (atom #{:n4 :n5})
-                      :conductors {:nemesis (nemesis/clock-scrambler 10000)
-                                   :bootstrapper (conductors/bootstrapper)}}))
-
-(def bridge-test-decommission
-  (cas-register-test "bridge decommission"
-                     {:conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))
-                                   :decommissioner (conductors/decommissioner)}}))
-
-(def halves-test-decommission
-  (cas-register-test "halves decommission"
-                     {:conductors {:nemesis (nemesis/partition-random-halves)
-                                   :decommissioner (conductors/decommissioner)}}))
-
-(def isolate-node-test-decommission
-  (cas-register-test "isolate node decommission"
-                     {:conductors {:nemesis (nemesis/partition-random-node)
-                                   :decommissioner (conductors/decommissioner)}}))
-
-(def crash-subset-test-decommission
-  (cas-register-test "crash decommission"
-                     {:conductors {:nemesis (crash-nemesis)
-                                   :decommissioner (conductors/decommissioner)}}))
-
-(def clock-drift-test-decommission
-  (cas-register-test "clock drift decommission"
-                     {:conductors {:nemesis (nemesis/clock-scrambler 10000)
-                                   :decommissioner (conductors/decommissioner)}}))
+;(def bridge-test-bootstrap
+;  (cas-register-test "bridge bootstrap"
+;                     {:bootstrap (atom #{:n4 :n5})
+;                      :conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))
+;                                   :bootstrapper (conductors/bootstrapper)}}))
+;
+;(def halves-test-bootstrap
+;  (cas-register-test "halves bootstrap"
+;                     {:bootstrap (atom #{:n4 :n5})
+;                      :conductors {:nemesis (nemesis/partition-random-halves)
+;                                   :bootstrapper (conductors/bootstrapper)}}))
+;
+;(def isolate-node-test-bootstrap
+;  (cas-register-test "isolate node bootstrap"
+;                     {:bootstrap (atom #{:n4 :n5})
+;                      :conductors {:nemesis (nemesis/partition-random-node)
+;                                   :bootstrapper (conductors/bootstrapper)}}))
+;
+;(def crash-subset-test-bootstrap
+;  (cas-register-test "crash bootstrap"
+;                     {:bootstrap (atom #{:n4 :n5})
+;                      :conductors {:nemesis (crash-nemesis)
+;                                   :bootstrapper (conductors/bootstrapper)}}))
+;
+;(def clock-drift-test-bootstrap
+;  (cas-register-test "clock drift bootstrap"
+;                     {:bootstrap (atom #{:n4 :n5})
+;                      :conductors {:nemesis (nemesis/clock-scrambler 10000)
+;                                   :bootstrapper (conductors/bootstrapper)}}))
+;
+;(def bridge-test-decommission
+;  (cas-register-test "bridge decommission"
+;                     {:conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))
+;                                   :decommissioner (conductors/decommissioner)}}))
+;
+;(def halves-test-decommission
+;  (cas-register-test "halves decommission"
+;                     {:conductors {:nemesis (nemesis/partition-random-halves)
+;                                   :decommissioner (conductors/decommissioner)}}))
+;
+;(def isolate-node-test-decommission
+;  (cas-register-test "isolate node decommission"
+;                     {:conductors {:nemesis (nemesis/partition-random-node)
+;                                   :decommissioner (conductors/decommissioner)}}))
+;
+;(def crash-subset-test-decommission
+;  (cas-register-test "crash decommission"
+;                     {:conductors {:nemesis (crash-nemesis)
+;                                   :decommissioner (conductors/decommissioner)}}))
+;
+;(def clock-drift-test-decommission
+;  (cas-register-test "clock drift decommission"
+;                     {:conductors {:nemesis (nemesis/clock-scrambler 10000)
+;                                   :decommissioner (conductors/decommissioner)}}))
