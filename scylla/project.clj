@@ -1,14 +1,16 @@
 (defproject scylla "0.1.0-SNAPSHOT"
   :description "Jepsen testing for Scylla"
-  :url "http://github.com/riptano/jepsen"
+  :url "http://github.com/scylladb/jepsen"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.10.0"]
                  [org.clojure/java.jmx "0.3.1"]
                  [jepsen "0.1.16-SNAPSHOT" :exclusions [org.slf4j/slf4j-api]]
-                 [cc.qbits/alia "4.3.1"]
+                 [cc.qbits/alia "4.3.1" :exclusions [com.datastax.cassandra/cassandra-driver-core
+                                                     com.datastax.cassandra:dse-driver]]
                  [cc.qbits/hayt "4.1.0"]
-                 [com.codahale.metrics/metrics-core "3.0.2"]]
+                 [com.codahale.metrics/metrics-core "3.0.2"]
+                 [com.scylladb/scylla-driver-core "3.7.1-scylla-1"]]
   :test-selectors {:steady :steady
                    :bootstrap :bootstrap
                    :map :map
