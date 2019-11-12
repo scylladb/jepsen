@@ -46,7 +46,7 @@
     (setup! [this test node] this)
     (invoke! [this test op]
       (let [live-nodes (scylla/live-nodes test)]
-        (doseq [node live-nodes]
+        (doseq [_ live-nodes]
 	  ; we do not support it yet
           ;(scylla/nodetool node "replaybatchlog")
 	  )

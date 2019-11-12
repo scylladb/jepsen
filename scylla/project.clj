@@ -6,7 +6,7 @@
   :dependencies [[org.clojure/clojure "1.10.0"]
                  [org.clojure/java.jmx "0.3.1"]
                  [jepsen "0.1.16-SNAPSHOT" :exclusions [org.slf4j/slf4j-api]]
-                 [cc.qbits/alia "4.3.1" :exclusions [com.datastax.cassandra/cassandra-driver-core
+                 [cc.qbits/alia "4.3.3" :exclusions [com.datastax.cassandra/cassandra-driver-core
                                                      com.datastax.cassandra:dse-driver]]
                  [cc.qbits/hayt "4.1.0"]
                  [com.codahale.metrics/metrics-core "3.0.2"]

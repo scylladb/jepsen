@@ -75,7 +75,7 @@
               (catch UnavailableException e
                 (info "Not enough replicas - failing")
                 (assoc op :type :fail :value (.getMessage e)))
-              (catch ReadTimeoutException e
+              (catch ReadTimeoutException _
                 (assoc op :type :fail :value :timed-out))
               (catch NoHostAvailableException e
                 (info "All nodes are down - sleeping 2s")

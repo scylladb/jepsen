@@ -11,7 +11,6 @@
              [control   :as c :refer [| lit]]
              [client    :as client]
              [generator :as gen]
-             [nemesis   :as nemesis]
              [tests     :as tests]]
             [jepsen.control [net :as net]]
             [jepsen.os.debian :as debian])
@@ -154,8 +153,9 @@
                        "/apache-cassandra-" version "-bin.tar.gz"))]
       (info node "installing ScyllaDB from" tpath)
       (c/exec :wget :-O "/etc/apt/sources.list.d/scylla.list"
+      ;"http://downloads.scylladb.com.s3.amazonaws.com/deb/unstable/stable/master/331/scylladb-master/scylla.list")
               (str "http://downloads.scylladb.com.s3.amazonaws.com/deb/debian/scylla-"
-              version "-stretch.list"))
+                   version "-stretch.list"))
       (c/exec
        :apt-get :update)
       (c/exec
@@ -171,8 +171,7 @@
       (c/su
        (c/exec :echo (slurp (io/resource "start-scylla.sh"))
                :> "/start-scylla.sh")
-       (c/exec :chmod :+x "/start-scylla.sh"))
-      ))))
+       (c/exec :chmod :+x "/start-scylla.sh"))))))
 
 (defn configure!
   "Uploads configuration files to the given node."
@@ -401,10 +400,8 @@
   (test-aware-node-start-stopper
    safe-mostly-small-nonempty-subset
    (fn start [_ node]
-     (info node "[crash nemesis] killing scylla and scylla-jmx")
      (meh (c/su (c/exec :killall :-9 :scylla-jmx :scylla))) [:killed node])
    (fn stop  [test node]
-     (info node "[crash nemesis] restarting scylla")
      (meh (guarded-start! node test)) [:restarted node])))
 
 (defn scylla-test
