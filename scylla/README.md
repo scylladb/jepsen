@@ -36,8 +36,6 @@ Then, a patched version of Cassaforte from the `trunk` branch at [GitHub](https:
 
 Lastly, a patched version of clj-ssh must be installed. This is available at [GitHub](https://github.com/jkni/clj-ssh/tree/trunk) and should be `lein install`ed. (aphyr: I think this is no longer necessary; the patch from this branch is in mainline clj-ssh as well)
 
-Lastly, from inside your local Jepsen repository clone, you should `lein install` Jepsen inside the container. The version of Jepsen provided in this repository has diverged slightly from upstream, so the regular Clojars artifacts will not work.
-
 ## Running Tests
 
 A whole category of tests can be run using the selectors defined in `project.clj`. For example, one could run `lein test :mv` to test materialized views. These tests are additive, so one could run `lein test :mv :lwt` to test materialized views and lightweight transactions.
