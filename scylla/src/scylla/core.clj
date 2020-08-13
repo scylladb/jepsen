@@ -411,7 +411,8 @@
               :os      debian/os
               :db      (db "3.1")
               :bootstrap (atom #{})
-              :decommission (atom #{})})
+              :decommission (atom #{})
+              :nonserializable-keys [:conductors]})
       ; TODO: Scylla originally set this up by making hardcoded changes to
       ; jepsen.control; I've pulled it out to this point so that we don't need
       ; a custom version of Jepsen to run the test. I've also commented this
