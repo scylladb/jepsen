@@ -11,7 +11,8 @@
             [qbits.alia.policy.retry :as retry]
             [qbits.hayt :refer :all]
             [scylla.core :refer :all]
-            [scylla.conductors :as conductors])
+            [scylla.conductors :as conductors]
+            [scylla.generator :as sgen])
   (:import (clojure.lang ExceptionInfo)
            (com.datastax.driver.core.exceptions UnavailableException
                                                 WriteTimeoutException
@@ -117,14 +118,14 @@
                                       (->> (gen/clients (assocs identity))
                                            (gen/delay 1)
                                            (std-gen 250))
-                                      (gen/conductor :replayer
-                                                     (gen/once {:type :info :f :replay}))
+                                      (sgen/conductor :replayer
+                                                      (gen/once {:type :info :f :replay}))
                                       (read-once)
                                       (->> (gen/clients (assocs -))
                                            (gen/delay 1)
                                            (std-gen 250))
-                                      (gen/conductor :replayer
-                                                     (gen/once {:type :info :f :replay}))
+                                      (sgen/conductor :replayer
+                                                      (gen/once {:type :info :f :replay}))
                                       (read-once))
                           :checker (checker/associative-map)})
          (merge-with merge {:conductors {:replayer (conductors/replayer)}} opts)))

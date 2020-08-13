@@ -10,7 +10,8 @@
             [qbits.alia :as alia]
             [qbits.hayt :refer :all]
             [scylla.core :refer :all]
-            [scylla.conductors :as conductors])
+            [scylla.conductors :as conductors]
+            [scylla.generator :as sgen])
   (:import (clojure.lang ExceptionInfo)
            (com.datastax.driver.core.exceptions UnavailableException
                                                 WriteTimeoutException
@@ -131,14 +132,14 @@
                                                        (gen/sleep 10)
                                                        {:type :info :f :start}])))
                                            (bootstrap 2)
-                                           (gen/conductor
+                                           (sgen/conductor
                                             :decommissioner
                                             (gen/seq (cycle
                                                       [(gen/sleep 4)
                                                        {:type :info :f :decommission}])))
                                            (gen/time-limit 30))
                                       (->> gen/void
-                                           (gen/conductor
+                                           (sgen/conductor
                                             :bootstrapper
                                             (gen/once {:type :info :f :bootstrapper}))
                                            gen/barrier))

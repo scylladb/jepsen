@@ -13,7 +13,8 @@
              [generator :as gen]
              [tests     :as tests]]
             [jepsen.control [net :as net]]
-            [jepsen.os.debian :as debian])
+            [jepsen.os.debian :as debian]
+            [scylla.generator :as sgen])
   (:import (clojure.lang ExceptionInfo)
            (com.datastax.driver.core Session)
            (com.datastax.driver.core Cluster)
@@ -277,10 +278,10 @@
   "A generator that bootstraps nodes into the cluster with the given pause
   and routes other :op's onward."
   [pause src-gen]
-  (gen/conductor :bootstrapper
-                 (gen/seq (cycle [(gen/sleep pause)
-                                  {:type :info :f :bootstrap}]))
-                 src-gen))
+  (sgen/conductor :bootstrapper
+                  (gen/seq (cycle [(gen/sleep pause)
+                                   {:type :info :f :bootstrap}]))
+                  src-gen))
 
 (defn std-gen
   "Takes a client generator and wraps it in a typical schedule and nemesis
@@ -295,7 +296,7 @@
                            (gen/sleep (scaled 60))
                            {:type :info :f :stop}])))
          (bootstrap 120)
-         (gen/conductor :decommissioner
+         (sgen/conductor :decommissioner
                         (gen/seq (cycle [(gen/sleep (scaled 100))
                                          {:type :info :f :decommission}])))
          (gen/time-limit (scaled duration)))
