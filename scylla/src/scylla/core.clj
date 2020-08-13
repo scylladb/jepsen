@@ -406,10 +406,20 @@
 
 (defn scylla-test
   [name opts]
-  (merge tests/noop-test
-         {:name    (str "scylla " name)
-          :os      debian/os
-          :db      (db "3.1")
-          :bootstrap (atom #{})
-          :decommission (atom #{})}
-         opts))
+  (-> tests/noop-test
+      (merge {:name    (str "scylla " name)
+              :os      debian/os
+              :db      (db "3.1")
+              :bootstrap (atom #{})
+              :decommission (atom #{})})
+      ; TODO: Scylla originally set this up by making hardcoded changes to
+      ; jepsen.control; I've pulled it out to this point so that we don't need
+      ; a custom version of Jepsen to run the test. I've also commented this
+      ; out, because it breaks the test for non-root users--I think it's
+      ; intended for Docker only. Make sure this is configurable when we switch
+      ; over to using jepsen.cli--I think we've got CLI flags for this already
+      ; but double-check.
+      ;(update :ssh assoc :private-key-path "/root/.ssh/id_rsa"
+      ;                   :strict-host-key-checking :no)
+      (merge opts)
+      ))

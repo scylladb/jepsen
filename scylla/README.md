@@ -34,11 +34,12 @@ The shaded driver available with C* should be installed to your local maven repo
 
 Then, a patched version of Cassaforte from the `trunk` branch at [GitHub](https://github.com/jkni/cassaforte/tree/trunk) should be `lein install`ed. This can be done by cloning the repository
 
-Lastly, a patched version of clj-ssh must be installed. This is available at [GitHub](https://github.com/jkni/clj-ssh/tree/trunk) and should be `lein install`ed.
+Lastly, a patched version of clj-ssh must be installed. This is available at [GitHub](https://github.com/jkni/clj-ssh/tree/trunk) and should be `lein install`ed. (aphyr: I think this is no longer necessary; the patch from this branch is in mainline clj-ssh as well)
 
 Lastly, from inside your local Jepsen repository clone, you should `lein install` Jepsen inside the container. The version of Jepsen provided in this repository has diverged slightly from upstream, so the regular Clojars artifacts will not work.
 
 ## Running Tests
+
 A whole category of tests can be run using the selectors defined in `project.clj`. For example, one could run `lein test :mv` to test materialized views. These tests are additive, so one could run `lein test :mv :lwt` to test materialized views and lightweight transactions.
 
 To run an individual test, one can use a command like `lein test :only scylla.counter-test/cql-counter-inc-halves`.
