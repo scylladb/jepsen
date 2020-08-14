@@ -145,34 +145,28 @@
   "Installs ScyllaDB on the given node."
   [node version]
   (c/su
-   (c/cd
-    "/tmp"
-    (let [tpath (System/getenv "CASSANDRA_TARBALL_PATH")
-          url (or tpath
-                  (System/getenv "CASSANDRA_TARBALL_URL")
-                  (str "http://www.us.apache.org/dist/cassandra/" version
-                       "/apache-cassandra-" version "-bin.tar.gz"))]
-      (info node "installing ScyllaDB from" tpath)
-      (c/exec :wget :-O "/etc/apt/sources.list.d/scylla.list"
-      ;"http://downloads.scylladb.com.s3.amazonaws.com/deb/unstable/stable/master/331/scylladb-master/scylla.list")
-              (str "http://downloads.scylladb.com.s3.amazonaws.com/deb/debian/scylla-"
-                   version "-stretch.list"))
-      (c/exec
-       :apt-get :update)
-      (c/exec
-       :apt-get :install :-y :--force-yes :scylla-server :scylla-jmx :scylla-tools)
-      (info node "restarting rsyslog service")
-      (c/su
-       (c/exec :mkdir :-p (lit "/var/log/scylla"))
-       (c/exec :install :-o :root :-g :adm :-m :0640 (lit "/dev/null") (lit "/var/log/scylla/scylla.log"))
-       (c/exec :echo
-               ":syslogtag, startswith, \"scylla\" /var/log/scylla/scylla.log\n& ~" :> (lit "/etc/rsyslog.d/10-scylla.conf"))
-       (c/exec :service :rsyslog :restart))
-      (info node "copy scylla start script to node")
-      (c/su
-       (c/exec :echo (slurp (io/resource "start-scylla.sh"))
-               :> "/start-scylla.sh")
-       (c/exec :chmod :+x "/start-scylla.sh"))))))
+    (c/cd "/tmp"
+          (info node "installing ScyllaDB")
+          (c/exec :wget :-O "/etc/apt/sources.list.d/scylla.list"
+                  ;"http://downloads.scylladb.com.s3.amazonaws.com/deb/unstable/stable/master/331/scylladb-master/scylla.list")
+                  (str "http://downloads.scylladb.com.s3.amazonaws.com/deb/debian/scylla-"
+                       version "-stretch.list"))
+          (c/exec
+            :apt-get :update)
+          (c/exec
+            :apt-get :install :-y :--force-yes :scylla-server :scylla-jmx :scylla-tools)
+          (info node "restarting rsyslog service")
+          (c/su
+            (c/exec :mkdir :-p (lit "/var/log/scylla"))
+            (c/exec :install :-o :root :-g :adm :-m :0640 (lit "/dev/null") (lit "/var/log/scylla/scylla.log"))
+            (c/exec :echo
+                    ":syslogtag, startswith, \"scylla\" /var/log/scylla/scylla.log\n& ~" :> (lit "/etc/rsyslog.d/10-scylla.conf"))
+            (c/exec :service :rsyslog :restart))
+          (info node "copy scylla start script to node")
+          (c/su
+            (c/exec :echo (slurp (io/resource "start-scylla.sh"))
+                    :> "/start-scylla.sh")
+            (c/exec :chmod :+x "/start-scylla.sh")))))
 
 (defn configure!
   "Uploads configuration files to the given node."
@@ -192,7 +186,7 @@
                            (disable-hints?) "/g\"")
                       "\"s/commitlog_sync: .*/commitlog_sync: batch/g\""
                       (str "\"s/# commitlog_sync_batch_window_in_ms: .*/"
-                           "commitlog_sync_batch_window_in_ms: 1/g\"")
+                           "commitlog_sync_batch_window_in_ms: 1/g\"" )
                       "\"s/commitlog_sync_period_in_ms: .*/#/g\""
                       (str "\"s/# phi_convict_threshold: .*/phi_convict_threshold: " (phi-level)
                            "/g\"")
@@ -244,7 +238,8 @@
   (stop! node)
   (info node "deleting data files")
   (c/su
-   (meh (c/exec :rm :-rf (lit "/var/lib/scylla/*")))))
+    ; TODO: wipe log files?
+    (meh (c/exec :rm :-rf (lit "/var/lib/scylla/*")))))
 
 (defn db
   "New ScyllaDB run"
