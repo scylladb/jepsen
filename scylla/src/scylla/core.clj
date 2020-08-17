@@ -123,9 +123,11 @@
       (if (> nbRetry 100)
         (RetryPolicy$RetryDecision/rethrow)
         (RetryPolicy$RetryDecision/retry cl)))
+
     (onWriteTimeout [statement cl writeType requiredAcks
                      receivedAcks nbRetry]
       (RetryPolicy$RetryDecision/rethrow))
+
     (onUnavailable [statement cl requiredReplica aliveReplica nbRetry]
       (info "Caught UnavailableException in driver - sleeping 2s")
       (Thread/sleep 2000)
@@ -133,36 +135,33 @@
         (RetryPolicy$RetryDecision/rethrow)
         (RetryPolicy$RetryDecision/retry cl)))))
 
-(def setup-lock (Object.))
-
-(defn cached-install?
-  [src]
-  (try (c/exec :grep :-s :-F :-x (lit src) (lit ".download"))
-       true
-       (catch RuntimeException _ false)))
-
 (defn install!
   "Installs ScyllaDB on the given node."
   [node version]
   (c/su
     (c/cd "/tmp"
-          (info node "installing ScyllaDB")
-          (c/exec :wget :-O "/etc/apt/sources.list.d/scylla.list"
-                  ;"http://downloads.scylladb.com.s3.amazonaws.com/deb/unstable/stable/master/331/scylladb-master/scylla.list")
-                  (str "http://downloads.scylladb.com.s3.amazonaws.com/deb/debian/scylla-"
-                       version "-stretch.list"))
-          (c/exec
-            :apt-get :update)
-          (c/exec
-            :apt-get :install :-y :--force-yes :scylla-server :scylla-jmx :scylla-tools)
-          (info node "restarting rsyslog service")
-          (c/su
-            (c/exec :mkdir :-p (lit "/var/log/scylla"))
-            (c/exec :install :-o :root :-g :adm :-m :0640 (lit "/dev/null") (lit "/var/log/scylla/scylla.log"))
-            (c/exec :echo
-                    ":syslogtag, startswith, \"scylla\" /var/log/scylla/scylla.log\n& ~" :> (lit "/etc/rsyslog.d/10-scylla.conf"))
-            (c/exec :service :rsyslog :restart))
-          (info node "copy scylla start script to node")
+          (info "installing ScyllaDB")
+          (debian/add-repo!
+            "scylla"
+            (str "deb  [arch=amd64] http://downloads.scylladb.com/downloads/"
+                 "scylla/deb/debian/scylladb-" version " buster non-free")
+            "hkp://keyserver.ubuntu.com:80"
+            "5e08fbd8b5d6ec9c")
+          ; Scylla wants to install SNTP/NTP, which is going to break in
+          ; containers--we skip the install here.
+          (debian/install [:scylla :scylla-jmx :scylla-tools :ntp-])
+
+          (info "configuring scylla logging")
+          (c/exec :mkdir :-p (lit "/var/log/scylla"))
+          (c/exec :install :-o :root :-g :adm :-m :0640 "/dev/null"
+                  "/var/log/scylla/scylla.log")
+          (c/exec :echo
+                  ":syslogtag, startswith, \"scylla\" /var/log/scylla/scylla.log\n& ~" :> "/etc/rsyslog.d/10-scylla.conf")
+          (c/exec :service :rsyslog :restart)
+
+          ; We don't presently use this, but it might come in handy if we have
+          ; to test binaries later.
+          (info "copy scylla start script to node")
           (c/su
             (c/exec :echo (slurp (io/resource "start-scylla.sh"))
                     :> "/start-scylla.sh")
@@ -173,6 +172,8 @@
   [node _]
   (info node "configuring ScyllaDB")
   (c/su
+    (c/exec :echo (slurp (io/resource "default/scylla-server"))
+            :> "/etc/default/scylla-server")
    (doseq [rep (into ["\"s/.*cluster_name: .*/cluster_name: 'jepsen'/g\""
                       "\"s/row_cache_size_in_mb: .*/row_cache_size_in_mb: 20/g\""
                       (str "\"s/seeds: .*/seeds: '" (dns-resolve :n1) "," (dns-resolve :n2) "'/g\"")
@@ -199,13 +200,19 @@
    (c/exec :echo (str "auto_bootstrap: "  true)
            :>> "/etc/scylla/scylla.yaml")))
 
+(defn syclla-setup!
+  "This runs a one-time benchmark to tune system settings. This actually looks like it does... more than just that--there's stuff in here about mucking with NTP. Maybe enable this later?"
+  [node]
+  (c/su
+    (c/exec :scylla_setup)))
+
 (defn start!
   "Starts ScyllaDB"
   [node _]
   (info node "starting ScyllaDB")
-    ;(nemesis/set-time! 0)
   (c/su
-   (c/exec "/start-scylla.sh")
+    (c/exec :service :scylla-server :start)
+   ; TODO: Poll Scylla for startup, rather than waiting 2 minutes (!)
    (Thread/sleep 120000))
   (info node "started ScyllaDB"))
 
@@ -214,9 +221,10 @@
   through initial DB lifecycle or a bootstrap. It will not start decommissioned
   nodes."
   [node test]
-  (let [bootstrap (:bootstrap test)
-        decommission (:decommission test)]
-    (when-not (or (contains? @bootstrap node) (->> node name dns-resolve (get decommission)))
+  (let [bootstrap     (:bootstrap test)
+        decommission  (:decommission test)]
+    (when-not (or (contains? @bootstrap node)
+                  (->> node name dns-resolve (get decommission)))
       (start! node test))))
 
 (defn stop!
@@ -239,18 +247,19 @@
   (info node "deleting data files")
   (c/su
     ; TODO: wipe log files?
-    (meh (c/exec :rm :-rf (lit "/var/lib/scylla/*")))))
+    (meh (c/exec :rm :-rf (lit "/var/lib/scylla/data/*")))))
 
 (defn db
   "New ScyllaDB run"
   [version]
   (reify db/DB
     (setup! [_ test node]
-      (when-not (seq (System/getenv "LEAVE_CLUSTER_RUNNING"))
-        (wipe! node))
       (doto node
         (install! version)
         (configure! test)
+        ; Not sure this is safe to run yet--it looks to mess with other system
+        ; settings.
+        ; (scylla-setup!)
         (guarded-start! test)))
 
     (teardown! [_ test node]
@@ -405,7 +414,7 @@
   (-> tests/noop-test
       (merge {:name    (str "scylla " name)
               :os      debian/os
-              :db      (db "3.1")
+              :db      (db "4.2")
               :bootstrap (atom #{})
               :decommission (atom #{})
               :nonserializable-keys [:conductors]})
@@ -418,5 +427,7 @@
       ; but double-check.
       ;(update :ssh assoc :private-key-path "/root/.ssh/id_rsa"
       ;                   :strict-host-key-checking :no)
+      ; Hardcoding until we have a CLI runner--this is for EC2 specifically.
+      ;(update :ssh assoc :username "admin")
       (merge opts)
       ))
