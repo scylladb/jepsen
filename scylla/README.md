@@ -18,6 +18,14 @@ Some parameters are available for tuning through environment variables.
 - If the environment variable `JEPSEN_PHI_VALUE` is set, this will be provided as the phi value to the failure detector.
 - If the environment variable `JEPSEN_DISABLE_HINTS` is set, hinted handoff will be disabled.
 
+## Host setup
+
+If you're running in containers, your host system will need a higher limit for aio-max-nr. Might need this on EC2 as well:
+
+```
+# echo 16777216 >/proc/sys/fs/aio-max-nr
+```
+
 ## Starting the Docker Container
 
 A Docker container preconfigured to run Jepsen tests is available at `tjake/jepsen` on [Docker Hub](https://hub.docker.com/r/tjake/jepsen). Since it runs Docker inside Docker, it must be run with the privileged flag. A command like `docker run -it --privileged -v /home/jkni/git:/jkni-git tjake/jepsen` will start the container and attach to it as an interactive shell. Since you'll likely be running a newer version of Jepsen/C* tests than those available in the image, you'll want to share the directory containing your local Jepsen/C* clone with the container as in the example above.

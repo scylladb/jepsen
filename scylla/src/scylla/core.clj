@@ -167,6 +167,17 @@
                     :> "/start-scylla.sh")
             (c/exec :chmod :+x "/start-scylla.sh")))))
 
+(defn seeds
+  "Returns a comma-separated string of seed nodes to join to."
+  [test]
+  (->> (:nodes test)
+       (map dns-resolve)
+       (str/join ",")))
+
+; TODO: startup indicated by log line "started listening for CQL clients"
+; Also checks for gossip messages
+; https://github.com/scylladb/scylla-ccm/blob/next/ccmlib/scylla_cluster.py#L76
+
 (defn configure!
   "Uploads configuration files to the given node."
   [node _]
@@ -191,6 +202,7 @@
                       "\"s/commitlog_sync_period_in_ms: .*/#/g\""
                       (str "\"s/# phi_convict_threshold: .*/phi_convict_threshold: " (phi-level)
                            "/g\"")
+                      "\"s/# developer_mode: false/developer_mode: true/g\""
                       "\"/auto_bootstrap: .*/d\""]
                      (when (compressed-commitlog?)
                        ["\"s/#commitlog_compression.*/commitlog_compression:/g\""
