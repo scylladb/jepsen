@@ -14,7 +14,8 @@
              [tests     :as tests]]
             [jepsen.control [net :as net]]
             [jepsen.os.debian :as debian]
-            [scylla.generator :as sgen])
+            [scylla [client :as sc]
+                    [generator :as sgen]])
   (:import (clojure.lang ExceptionInfo)
            (com.datastax.driver.core Session)
            (com.datastax.driver.core Cluster)
@@ -212,21 +213,13 @@
    (c/exec :echo (str "auto_bootstrap: "  true)
            :>> "/etc/scylla/scylla.yaml")))
 
-(defn syclla-setup!
-  "This runs a one-time benchmark to tune system settings. This actually looks like it does... more than just that--there's stuff in here about mucking with NTP. Maybe enable this later?"
-  [node]
-  (c/su
-    (c/exec :scylla_setup)))
-
 (defn start!
   "Starts ScyllaDB"
   [node _]
   (info node "starting ScyllaDB")
   (c/su
     (c/exec :service :scylla-server :start)
-   ; TODO: Poll Scylla for startup, rather than waiting 2 minutes (!)
-   (Thread/sleep 120000))
-  (info node "started ScyllaDB"))
+    (info node "started ScyllaDB")))
 
 (defn guarded-start!
   "Guarded start that only starts nodes that have joined the cluster already
@@ -269,10 +262,9 @@
       (doto node
         (install! version)
         (configure! test)
-        ; Not sure this is safe to run yet--it looks to mess with other system
-        ; settings.
-        ; (scylla-setup!)
-        (guarded-start! test)))
+        (guarded-start! test))
+      (sc/close! (sc/await-open node))
+      (info "Scylla startup complete"))
 
     (teardown! [_ test node]
       (when-not (seq (System/getenv "LEAVE_CLUSTER_RUNNING"))
