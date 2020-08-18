@@ -6,8 +6,9 @@
              [checker   :as checker]
              [generator :as gen]
              [nemesis   :as nemesis]]
-            [scylla.core :refer :all]
-            [scylla.conductors :as conductors]
+            [scylla [client :as c]
+                    [conductors :as conductors]
+                    [db :as db]]
             [qbits.alia :as alia]
             [qbits.hayt :refer :all])
   (:import (clojure.lang ExceptionInfo)
@@ -38,53 +39,41 @@
                                                                  :cid    :int
                                                                  :value  :int
                                                                  :primary-key [:pid :cid]})
-                                            (with {:compaction {:class (compaction-strategy)}}))))))
+                                            (with {:compaction {:class (db/compaction-strategy)}}))))))
 
   (invoke! [this test op]
-    (alia/execute session (use-keyspace :jepsen_keyspace))
+    (c/with-errors op #{:read}
+      (alia/execute session (use-keyspace :jepsen_keyspace))
+      (case (:f op)
+        :add (let [value (:value op)]
+               (alia/execute session
+                             (str "BEGIN BATCH "
+                                  "INSERT INTO bat (pid, cid, value) VALUES ("
+                                  value ", 0, " value ");"
+                                  "INSERT INTO bat (pid, cid, value) VALUES ("
+                                  value ", 1, " value ");"
+                                  "APPLY BATCH;")
+                             {:consistency :quorum})
+               (assoc op :type :ok))
+        :read (let [results (alia/execute session
+                                          (select :bat
+                                                  {:consistency :all}))
+                    value-a (->> results
+                                 (filter (fn [ret] (= (:cid ret) 0)))
+                                 (map :value)
+                                 (into (sorted-set)))
+                    value-b (->> results
+                                 (filter (fn [ret] (= (:cid ret) 1)))
+                                 (map :value)
+                                 (into (sorted-set)))]
+                ; TODO: I don't think this actually verifies anything--the
+                ; failed ops are going to be ignored by the set checker, which
+                ; stops us from detecting the divergence. We can write an extra
+                ; checker to look for these, though!
+                (if-not (= value-a value-b)
+                  (assoc op :type :fail :value [value-a value-b])
+                  (assoc op :type :ok :value value-a))))))
 
-    (case (:f op)
-      :add (try (let [value (:value op)]
-                  (alia/execute session
-                                (str "BEGIN BATCH "
-                                     "INSERT INTO bat (pid, cid, value) VALUES ("
-                                     value ", 0, " value ");"
-                                     "INSERT INTO bat (pid, cid, value) VALUES ("
-                                     value ", 1, " value ");"
-                                     "APPLY BATCH;")
-                                {:consistency :quorum})
-                  (assoc op :type :ok))
-                (catch UnavailableException e
-                  (assoc op :type :fail :value (.getMessage e)))
-                (catch WriteTimeoutException _
-                  (assoc op :type :info :value :timed-out))
-                (catch NoHostAvailableException e
-                  (info "All nodes are down - sleeping 2s")
-                  (Thread/sleep 2000)
-                  (assoc op :type :fail :value (.getMessage e))))
-      :read (try (let [results (alia/execute session
-                                             (select :bat
-                                                     {:consistency :all}))
-                       value-a (->> results
-                                    (filter (fn [ret] (= (:cid ret) 0)))
-                                    (map :value)
-                                    (into (sorted-set)))
-                       value-b (->> results
-                                    (filter (fn [ret] (= (:cid ret) 1)))
-                                    (map :value)
-                                    (into (sorted-set)))]
-                   (if-not (= value-a value-b)
-                     (assoc op :type :fail :value [value-a value-b])
-                     (assoc op :type :ok :value value-a)))
-                 (catch UnavailableException e
-                   (info "Not enough replicas - failing")
-                   (assoc op :type :fail :value (.getMessage e)))
-                 (catch ReadTimeoutException _
-                   (assoc op :type :fail :value :timed-out))
-                 (catch NoHostAvailableException e
-                   (info "All nodes are down - sleeping 2s")
-                   (Thread/sleep 2000)
-                   (assoc op :type :fail :value (.getMessage e))))))
   (close! [_ _]
     (alia/shutdown session))
 
@@ -95,95 +84,16 @@
   []
   (->BatchSetClient (atom false) nil))
 
-(defn batch-set-test
-  [name opts]
-  (merge (scylla-test (str "batch set " name)
-                      {:client (batch-set-client)
-                       :generator (gen/phases
-                                   (->> (gen/clients (adds))
-                                        (gen/delay 1)
-                                        std-gen)
-                                   (gen/delay 65
-                                              (read-once)))
-                       :checker (checker/set)})
-         (merge-with merge {:conductors {:replayer (conductors/replayer)}} opts)))
+(defn adds
+  "Generator that emits :add operations for sequential integers."
+  []
+  (->> (range)
+       (map (fn [x] {:type :invoke, :f :add, :value x}))
+       gen/seq))
 
-(def bridge-test
-  (batch-set-test "bridge"
-                  {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))}))
-
-(def halves-test
-
-  (batch-set-test "halves"
-                  {:nemesis (nemesis/partition-random-halves)}))
-
-(def isolate-node-test
-  (batch-set-test "isolate node"
-                  {:nemesis (nemesis/partition-random-node)}))
-
-(def crash-subset-test
-  (batch-set-test "crash"
-                  {:nemesis (crash-nemesis)}))
-
-(def clock-drift-test
-  (batch-set-test "clock drift"
-                  {:nemesis (nemesis/clock-scrambler 10000)}))
-
-(def flush-compact-test
-  (batch-set-test "flush and compact"
-                  {:nemesis (conductors/flush-and-compacter)}))
-
-;(def bridge-test-bootstrap
-;  (batch-set-test "bridge bootstrap"
-;                  {:bootstrap (atom #{:n4 :n5})
-;                   :conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))
-;                                :bootstrapper (conductors/bootstrapper)}}))
-;
-;(def halves-test-bootstrap
-;  (batch-set-test "halves bootstrap"
-;                  {:bootstrap (atom #{:n4 :n5})
-;                   :conductors {:nemesis (nemesis/partition-random-halves)
-;                                :bootstrapper (conductors/bootstrapper)}}))
-;
-;(def isolate-node-test-bootstrap
-;  (batch-set-test "isolate node bootstrap"
-;                  {:bootstrap (atom #{:n4 :n5})
-;                   :conductors {:nemesis (nemesis/partition-random-node)
-;                                :bootstrapper (conductors/bootstrapper)}}))
-;
-;(def crash-subset-test-bootstrap
-;  (batch-set-test "crash bootstrap"
-;                  {:bootstrap (atom #{:n4 :n5})
-;                   :conductors {:nemesis (crash-nemesis)
-;                                :bootstrapper (conductors/bootstrapper)}}))
-;
-;(def clock-drift-test-bootstrap
-;  (batch-set-test "clock drift bootstrap"
-;                  {:bootstrap (atom #{:n4 :n5})
-;                   :conductors {:nemesis (nemesis/clock-scrambler 10000)
-;                                :bootstrapper (conductors/bootstrapper)}}))
-;
-;(def bridge-test-decommission
-;  (batch-set-test "bridge decommission"
-;                  {:conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))
-;                                :decommissioner (conductors/decommissioner)}}))
-;
-;(def halves-test-decommission
-;  (batch-set-test "halves decommission"
-;                  {:conductors {:nemesis (nemesis/partition-random-halves)
-;                                :decommissioner (conductors/decommissioner)}}))
-;
-;(def isolate-node-test-decommission
-;  (batch-set-test "isolate node decommission"
-;                  {:conductors {:nemesis (nemesis/partition-random-node)
-;                                :decommissioner (conductors/decommissioner)}}))
-;
-;(def crash-subset-test-decommission
-;  (batch-set-test "crash decommission"
-;                  {:conductors {:nemesis (crash-nemesis)
-;                                :decommissioner (conductors/decommissioner)}}))
-;
-;(def clock-drift-test-decommission
-;  (batch-set-test "clock drift decommission"
-;                  {:conductors {:nemesis (nemesis/clock-scrambler 10000)
-;                                :decommissioner (conductors/decommissioner)}}))
+(defn set-workload
+  [opts]
+  {:client          (batch-set-client)
+   :generator       (adds)
+   :final-generator (gen/once {:type :invoke, :f :read})
+   :checker         (checker/set)})

@@ -5,10 +5,11 @@
             [dom-top.core :as dt]
             [clojure.tools.logging :refer [info warn]]
             [slingshot.slingshot :refer [try+ throw+]])
-  (:import (com.datastax.driver.core.exceptions UnavailableException
-                                                WriteTimeoutException
+  (:import (com.datastax.driver.core.exceptions NoHostAvailableException
                                                 ReadTimeoutException
-                                                NoHostAvailableException)
+                                                UnavailableException
+                                                WriteFailureException
+                                                WriteTimeoutException)
            (com.datastax.driver.core Session
                                      Cluster
                                      Metadata
@@ -19,8 +20,9 @@
 (defn open
   "Returns an map of :cluster :session bound to the given node."
   [node]
-  ; TODO: don't do a cluster config--we want to bind specifically to a single
-  ; node.
+  ; TODO: Reconnection (see logs from
+  ; com.datastax.driver.core.ControlConnection) has an exponential backoff by
+  ; default which could mask errors--tune this to be more aggressive.
   (let [cluster (alia/cluster
                   {:contact-points [node]
                    ; We want to force all requests to go to this particular
@@ -88,4 +90,46 @@
         (RetryPolicy$RetryDecision/rethrow)
         (RetryPolicy$RetryDecision/retry cl)))))
 
+(defmacro remap-errors
+  "Evaluates body, catching known client errors and remapping them to Slingshot
+  exceptions for ease of processing."
+  [& body]
+  `(try+ ~@body
+        (catch NoHostAvailableException e#
+          (throw+ {:type      :no-host-available
+                   :definite? true}))
+        (catch UnavailableException e#
+          (throw+ {:type      :unavailable
+                   :definite? true}))
+        (catch WriteFailureException e#
+          (throw+ {:type      :write-failure
+                   :definite? false}))
+        (catch WriteTimeoutException e#
+          (throw+ {:type      :write-timeout
+                   :definite? false}))))
 
+(defmacro slow-no-host-available
+  "Introduces artificial latency for NoHostAvailableExceptions, which
+  prevents us from performing a million no-op requests a second when the client
+  thinks every node is down."
+  [& body]
+  `(try ~@body
+        (catch NoHostAvailableException e#
+          (Thread/sleep 2000)
+          (throw e#))))
+
+(defmacro with-errors
+  "Takes an operation, a set of :f's which are idempotent, and a body to
+  evaluate. Evaluates body, slowing no-host-available errors, remapping errors
+  to friendly ones. When a known error is caught, returns op with :type :fail
+  or :info, depending on whether or not it is a definite error, and whether the
+  operation is idempotent."
+  [op idempotent? & body]
+  `(try+ (remap-errors (slow-no-host-available ~@body))
+         (catch (contains? '% :definite?) e#
+           (assoc ~op
+                  :type (if (or (~idempotent? (:f ~op))
+                                (:definite? e#))
+                          :fail
+                          :info)
+                  :error e#))))

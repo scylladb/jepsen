@@ -16,7 +16,8 @@
              [tests     :as tests]]
             [jepsen.control [net :as net]]
             [jepsen.os.debian :as debian]
-            [scylla [client     :as sc]
+            [scylla [batch :as batch]
+                    [client     :as sc]
                     [counter    :as counter]
                     [db         :as db]
                     [generator  :as sgen]])
@@ -32,7 +33,8 @@
 (def workloads
   "A map of workload names to functions that can take opts and construct
   workloads."
-  {:counter         counter/workload
+  {:batch-set       batch/set-workload
+   :counter         counter/workload
    :counter-inc-dec counter/inc-dec-workload})
 
 (def standard-workloads
@@ -222,24 +224,35 @@
   test map."
   [opts]
   (let [workload ((workloads (:workload opts)) opts)
-        nemesis  nil]
+        nemesis  nil
+        generator (->> (:generator workload)
+                       (gen/stagger (/ (:rate opts)))
+                       (gen/nemesis (:generator nemesis))
+                       (gen/time-limit (:time-limit opts)))
+        generator (if-let [fg (:final-generator workload)]
+                    (gen/phases generator
+                                (gen/nemesis (:final-generator nemesis))
+                                (gen/log "Waiting for cluster to recover")
+                                (gen/sleep 20)
+                                (gen/clients fg))
+                    generator)]
     (merge tests/noop-test
            opts
-           workload
+           (dissoc workload :generator :final-generator) ; These we handle
            {:name         (str "scylla " (name (:workload opts)))
             :os           debian/os
             :db           (db/db "4.2")
             :logging      {:overrides
-                           {"com.datastax.driver.core.Connection" :error
-                            "com.datastax.driver.core.ClockFactory" :error}}
+                           {"com.datastax.driver.core.Connection"   :error
+                            "com.datastax.driver.core.ClockFactory" :error
+                            "com.datastax.driver.core.Session"      :error
+                            ;"com.datastax.driver.core.ControlConnection" :off
+                            }}
             :bootstrap    (atom #{}) ; TODO: remove me
             :decommission (atom #{}) ; TODO: remove me
             :nonserializable-keys [:conductors] ; TODO: remove me
             ; TODO: recovery and :final-generator, if applicable
-            :generator    (->> (:generator workload)
-                               (gen/stagger (/ (:rate opts)))
-                               (gen/nemesis (:generator nemesis))
-                               (gen/time-limit (:time-limit opts)))})))
+            :generator    generator})))
 
 (def cli-opts
   "Options for test runners."
