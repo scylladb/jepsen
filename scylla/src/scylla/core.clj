@@ -23,7 +23,8 @@
                     [db             :as db]
                     [generator      :as sgen]
                     [mv             :as mv]]
-            [scylla.collections [map :as cmap]])
+            [scylla.collections [map :as cmap]
+                                [set :as cset]])
   (:import (clojure.lang ExceptionInfo)
            (com.datastax.driver.core Session)
            (com.datastax.driver.core Cluster)
@@ -40,8 +41,9 @@
    :cas-register    cas-register/workload
    :counter         counter/workload
    :counter-inc-dec counter/inc-dec-workload
-   :map             cmap/workload
-   :mv              mv/workload})
+   :cmap            cmap/workload
+   :mv              mv/workload
+   :cset            cset/workload})
 
 (def standard-workloads
   "The workload names we run for test-all by default."
@@ -83,14 +85,6 @@
                    1)]
     (Math/ceil (* v factor))))
 
-(defn recover
-  "A generator which stops the nemesis and allows some time for recovery."
-  []
-  (gen/nemesis
-   (gen/phases
-    (gen/once {:type :info, :f :stop})
-    (gen/sleep 10))))
-
 (defn bootstrap
   "A generator that bootstraps nodes into the cluster with the given pause
   and routes other :op's onward."
@@ -99,54 +93,6 @@
                   (gen/seq (cycle [(gen/sleep pause)
                                    {:type :info :f :bootstrap}]))
                   src-gen))
-
-(defn std-gen
-  "Takes a client generator and wraps it in a typical schedule and nemesis
-  causing failover."
-  ([gen] (std-gen 400 gen))
-  ([duration gen]
-   (gen/phases
-    (->> gen
-         (gen/nemesis
-          (gen/seq (cycle [(gen/sleep (scaled 20))
-                           {:type :info :f :start}
-                           (gen/sleep (scaled 60))
-                           {:type :info :f :stop}])))
-         (bootstrap 120)
-         (sgen/conductor :decommissioner
-                        (gen/seq (cycle [(gen/sleep (scaled 100))
-                                         {:type :info :f :decommission}])))
-         (gen/time-limit (scaled duration)))
-    (recover)
-    (gen/clients
-     (->> gen
-          (gen/time-limit (scaled 40)))))))
-
-; TODO: pull these generators out into workloads
-(defn w [_ _] {:type :invoke :f :write :value (rand-int 5)})
-(defn cas [_ _] {:type :invoke :f :cas :value [(rand-int 5) (rand-int 5)]})
-
-(defn adds
-  "Generator that emits :add operations for sequential integers."
-  []
-  (->> (range)
-       (map (fn [x] {:type :invoke, :f :add, :value x}))
-       gen/seq))
-
-(defn assocs
-  "Generator that emits :assoc operations for sequential integers,
-  mapping x to (f x)"
-  [f]
-  (->> (range)
-       (map (fn [x] {:type :invoke :f :assoc :value {:k x
-                                                     :v (f x)}}))
-       gen/seq))
-
-(defn read-once
-  "A generator which reads exactly once."
-  []
-  (gen/clients
-   (gen/once {:type :invoke, :f :read})))
 
 (defn safe-mostly-small-nonempty-subset
   "Returns a subset of the given collection, with a logarithmically decreasing
@@ -245,7 +191,7 @@
                     (gen/phases generator
                                 (gen/nemesis (:final-generator nemesis))
                                 (gen/log "Waiting for cluster to recover")
-                                (gen/sleep 20)
+                                (gen/sleep 10)
                                 (gen/clients fg))
                     generator)]
     (merge tests/noop-test
