@@ -1,4 +1,5 @@
 (ns scylla.collections.map
+  "TODO: what is this for? I think it's... a set? Backed by a CQL map?"
   (:require [clojure [pprint :refer :all]]
             [clojure.tools.logging :refer [info]]
             [jepsen
@@ -16,70 +17,55 @@
                                                 ReadTimeoutException
                                                 NoHostAvailableException)))
 
-(defrecord CQLMapClient [tbl-created? session writec]
+(defrecord CQLMapClient [tbl-created? conn writec]
   client/Client
 
-  (open! [_ test _]
-    (let [cluster (alia/cluster {:contact-points (:nodes test)})
-          session (alia/connect cluster)]
-      (->CQLMapClient tbl-created? session writec)))
-
+  (open! [this test node]
+    (assoc this :conn (c/open node)))
 
   (setup! [_ test]
-    (locking tbl-created?
-      (when (compare-and-set! tbl-created? false true)
-        (alia/execute session (create-keyspace :jepsen_keyspace
-                                               (if-exists false)
-                                               (with {:replication {:class :SimpleStrategy
-                                                                    :replication_factor 3}})))
-        (alia/execute session (use-keyspace :jepsen_keyspace))
-        (alia/execute session (create-table :maps
-                                            (if-exists false)
-                                            (column-definitions {:id    :int
-                                                                 :elements    (map-type :int :int)
-                                                                 :primary-key [:id]})
-                                            (with {:compaction {:class (compaction-strategy)}})))
-        (alia/execute session (insert :maps (values [[:id 0]
-                                                     [:elements {}]]))))))
+    (let [s (:session conn)]
+      (locking tbl-created?
+        (when (compare-and-set! tbl-created? false true)
+          (alia/execute s (create-keyspace :jepsen_keyspace
+                                           (if-exists false)
+                                           (with {:replication {:class :SimpleStrategy
+                                                                :replication_factor 3}})))
+          (alia/execute s (use-keyspace :jepsen_keyspace))
+          (alia/execute s (create-table :maps
+                                        (if-exists false)
+                                        (column-definitions {:id    :int
+                                                             :elements    (map-type :int :int)
+                                                             :primary-key [:id]})
+                                        (with {:compaction {:class (db/compaction-strategy)}})))
+          (alia/execute s (insert :maps (values [[:id 0]
+                                                 [:elements {}]])))))))
 
-  (invoke! [_ _ op]
-    (alia/execute session (use-keyspace :jepsen_keyspace))
-    (case (:f op)
-      :add (try
-             (alia/execute session
-                           (update :maps
-                                   (set-columns {:elements [+ {(:value op) (:value op)}]})
-                                   (where [[= :id 0]]))
-                           {:consistency writec})
+  (invoke! [_ test op]
+    (let [s (:session conn)]
+      (c/with-errors op #{:read}
+        (alia/execute s (use-keyspace :jepsen_keyspace))
+        (case (:f op)
+          :add (do (alia/execute s
+                                 (update :maps
+                                         (set-columns {:elements [+ {(:value op) (:value op)}]})
+                                         (where [[= :id 0]]))
+                                 {:consistency writec})
 
-             (assoc op :type :ok)
-             (catch UnavailableException e
-               (assoc op :type :fail :value (.getMessage e)))
-             (catch WriteTimeoutException e
-               (assoc op :type :info :value :timed-out))
-             (catch NoHostAvailableException e
-               (info "All nodes are down - sleeping 2s")
-               (Thread/sleep 2000)
-               (assoc op :type :fail :value (.getMessage e))))
-      :read (try
-              (wait-for-recovery 30 session)
-              (let [value (->> (alia/execute session
-                                             (select :maps (where [[= :id 0]]))
-                                             {:consistency :all
-                                              :retry-policy aggressive-read})
-                               first
-                               :elements
-                               vals
-                               (into (sorted-set)))]
-                (assoc op :type :ok :value value))
-              (catch UnavailableException e
-                (info "Not enough replicas - failing")
-                (assoc op :type :fail :value (.getMessage e)))
-              (catch ReadTimeoutException _
-                (assoc op :type :fail :value :timed-out)))))
+                   (assoc op :type :ok))
+          :read (do (db/wait-for-recovery 30 s)
+                    (let [value (->> (alia/execute s
+                                                   (select :maps (where [[= :id 0]]))
+                                                   {:consistency :all
+                                                    :retry-policy c/aggressive-read})
+                                     first
+                                     :elements
+                                     vals
+                                     (into (sorted-set)))]
+                    (assoc op :type :ok :value value)))))))
 
   (close! [_ _]
-    (alia/shutdown session))
+    (c/close! conn))
 
   (teardown! [_ _]))
 
@@ -88,80 +74,16 @@
   ([] (->CQLMapClient (atom false) nil :one))
   ([writec] (->CQLMapClient (atom false) nil writec)))
 
-(defn cql-map-test
-  [name opts]
-  (merge (scylla-test (str "cql map " name)
-                         {:client (cql-map-client)
-                          :generator (gen/phases
-                                      (->> (adds)
-                                           (gen/stagger 1/10)
-                                           (gen/delay 1/2)
-                                           std-gen)
-                                      (read-once))
-                          :checker (checker/set)})
-         opts))
+(defn adds
+  "Generator that emits :add operations for sequential integers."
+  []
+  (->> (range)
+       (map (fn [x] {:type :invoke, :f :add, :value x}))
+       gen/seq))
 
-(def bridge-test
-  (cql-map-test "bridge"
-                {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))}))
-
-(def halves-test
-  (cql-map-test "halves"
-                {:nemesis (nemesis/partition-random-halves)}))
-
-(def isolate-node-test
-  (cql-map-test "isolate node"
-                {:nemesis (nemesis/partition-random-node)}))
-
-(def crash-subset-test
-  (cql-map-test "crash"
-                {:nemesis (crash-nemesis)}))
-
-(def flush-compact-test
-  (cql-map-test "flush and compact"
-                {:nemesis (conductors/flush-and-compacter)}))
-
-;(def bridge-test-bootstrap
-;  (cql-map-test "bridge bootstrap"
-;                {:bootstrap (atom #{:n4 :n5})
-;                 :conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))
-;                              :bootstrapper (conductors/bootstrapper)}}))
-;
-;(def halves-test-bootstrap
-;  (cql-map-test "halves bootstrap"
-;                {:bootstrap (atom #{:n4 :n5})
-;                 :conductors {:nemesis (nemesis/partition-random-halves)
-;                              :bootstrapper (conductors/bootstrapper)}}))
-;
-;(def isolate-node-test-bootstrap
-;  (cql-map-test "isolate node bootstrap"
-;                {:bootstrap (atom #{:n4 :n5})
-;                 :conductors {:nemesis (nemesis/partition-random-node)
-;                              :bootstrapper (conductors/bootstrapper)}}))
-;
-;(def crash-subset-test-bootstrap
-;  (cql-map-test "crash bootstrap"
-;                {:bootstrap (atom #{:n4 :n5})
-;                 :conductors {:nemesis (crash-nemesis)
-;                              :bootstrapper (conductors/bootstrapper)}}))
-;
-;(def bridge-test-decommission
-;  (cql-map-test "bridge decommission"
-;                {:conductors {:nemesis (nemesis/partitioner (comp nemesis/bridge shuffle))
-;                              :decommissioner (conductors/decommissioner)}}))
-;
-;(def halves-test-decommission
-;  (cql-map-test "halves decommission"
-;                {:conductors {:nemesis (nemesis/partition-random-halves)
-;                              :decommissioner (conductors/decommissioner)}}))
-;
-;(def isolate-node-test-decommission
-;  (cql-map-test "isolate node decommission"
-;                {:conductors {:nemesis (nemesis/partition-random-node)
-;                              :decommissioner (conductors/decommissioner)}}))
-;
-;(def crash-subset-test-decommission
-;  (cql-map-test "crash decommission"
-;                {:client (cql-map-client :quorum)
-;                 :conductors {:nemesis (crash-nemesis)
-;                              :decommissioner (conductors/decommissioner)}}))
+(defn workload
+  [opts]
+  {:client          (cql-map-client)
+   :generator       (adds)
+   :final-generator (gen/once {:type :invoke, :f :read})
+   :checker         (checker/set)})
