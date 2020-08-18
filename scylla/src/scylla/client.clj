@@ -3,11 +3,18 @@
   (:require [qbits.alia :as alia]
             [qbits.hayt :as hayt]
             [dom-top.core :as dt]
-            [clojure.tools.logging :refer [info warn]])
+            [clojure.tools.logging :refer [info warn]]
+            [slingshot.slingshot :refer [try+ throw+]])
   (:import (com.datastax.driver.core.exceptions UnavailableException
                                                 WriteTimeoutException
                                                 ReadTimeoutException
-                                                NoHostAvailableException)))
+                                                NoHostAvailableException)
+           (com.datastax.driver.core Session
+                                     Cluster
+                                     Metadata
+                                     Host)
+           (com.datastax.driver.core.policies RetryPolicy
+                                              RetryPolicy$RetryDecision)))
 
 (defn open
   "Returns an map of :cluster :session bound to the given node."
@@ -52,7 +59,33 @@
 
       c)
     (catch NoHostAvailableException e
-      (when (pos? tries)
-        (info node "not yet available, retrying")
-        (Thread/sleep await-open-interval)
-        (retry (dec tries))))))
+      (when (zero? tries)
+        (throw+ {:type :await-open-timeout
+                 :node node}))
+      (info node "not yet available, retrying")
+      (Thread/sleep await-open-interval)
+      (retry (dec tries)))))
+
+; This policy should only be used for final reads! It tries to
+; aggressively get an answer from an unstable cluster after
+; stabilization
+(def aggressive-read
+  (proxy [RetryPolicy] []
+    (onReadTimeout [statement cl requiredResponses
+                    receivedResponses dataRetrieved nbRetry]
+      (if (> nbRetry 100)
+        (RetryPolicy$RetryDecision/rethrow)
+        (RetryPolicy$RetryDecision/retry cl)))
+
+    (onWriteTimeout [statement cl writeType requiredAcks
+                     receivedAcks nbRetry]
+      (RetryPolicy$RetryDecision/rethrow))
+
+    (onUnavailable [statement cl requiredReplica aliveReplica nbRetry]
+      (info "Caught UnavailableException in driver - sleeping 2s")
+      (Thread/sleep 2000)
+      (if (> nbRetry 100)
+        (RetryPolicy$RetryDecision/rethrow)
+        (RetryPolicy$RetryDecision/retry cl)))))
+
+
