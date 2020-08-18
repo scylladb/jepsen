@@ -103,23 +103,37 @@
         (RetryPolicy$RetryDecision/rethrow)
         (RetryPolicy$RetryDecision/retry cl)))))
 
+(defmacro remap-errors-helper
+  "Basic error remapping. See remap-errors."
+  [& body]
+  `(try+ ~@body
+         (catch NoHostAvailableException e#
+           (throw+ {:type      :no-host-available
+                    :definite? true}))
+         (catch ReadTimeoutException e#
+           (throw+ {:type      :read-timeout
+                    :definite? false}))
+         (catch UnavailableException e#
+           (throw+ {:type      :unavailable
+                    :definite? true}))
+         (catch WriteFailureException e#
+           (throw+ {:type      :write-failure
+                    :definite? false}))
+         (catch WriteTimeoutException e#
+           (throw+ {:type      :write-timeout
+                    :definite? false}))))
+
 (defmacro remap-errors
   "Evaluates body, catching known client errors and remapping them to Slingshot
   exceptions for ease of processing."
   [& body]
-  `(try+ ~@body
-        (catch NoHostAvailableException e#
-          (throw+ {:type      :no-host-available
-                   :definite? true}))
-        (catch UnavailableException e#
-          (throw+ {:type      :unavailable
-                   :definite? true}))
-        (catch WriteFailureException e#
-          (throw+ {:type      :write-failure
-                   :definite? false}))
-        (catch WriteTimeoutException e#
-          (throw+ {:type      :write-timeout
-                   :definite? false}))))
+  `(try+ (remap-errors-helper ~@body)
+         ; Sometimes, but not always, Alia wraps exceptions in its own ex-info,
+         ; which *would* be helpful if we didn't already have to catch the
+         ; Cassandra driver exceptions on our own. We extract the cause of the
+         ; ex-info in this case, and try remapping it.
+         (catch [:type :qbits.alia/execute] e#
+           (remap-errors-helper (throw (:cause ~'&throw-context))))))
 
 (defmacro slow-no-host-available
   "Introduces artificial latency for NoHostAvailableExceptions, which
@@ -139,7 +153,7 @@
   operation is idempotent."
   [op idempotent? & body]
   `(try+ (remap-errors (slow-no-host-available ~@body))
-         (catch (contains? '% :definite?) e#
+         (catch (contains? ~'% :definite?) e#
            (assoc ~op
                   :type (if (or (~idempotent? (:f ~op))
                                 (:definite? e#))

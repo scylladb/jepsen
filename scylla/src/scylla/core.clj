@@ -16,12 +16,13 @@
              [tests     :as tests]]
             [jepsen.control [net :as net]]
             [jepsen.os.debian :as debian]
-            [scylla [batch :as batch]
-                    [client     :as sc]
-                    [counter    :as counter]
-                    [db         :as db]
-                    [generator  :as sgen]
-                    [mv         :as mv]])
+            [scylla [batch          :as batch]
+                    [cas-register   :as cas-register]
+                    [client         :as sc]
+                    [counter        :as counter]
+                    [db             :as db]
+                    [generator      :as sgen]
+                    [mv             :as mv]])
   (:import (clojure.lang ExceptionInfo)
            (com.datastax.driver.core Session)
            (com.datastax.driver.core Cluster)
@@ -35,6 +36,7 @@
   "A map of workload names to functions that can take opts and construct
   workloads."
   {:batch-set       batch/set-workload
+   :cas-register    cas-register/workload
    :counter         counter/workload
    :counter-inc-dec counter/inc-dec-workload
    :mv              mv/workload})
