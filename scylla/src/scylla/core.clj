@@ -56,10 +56,11 @@
 (def standard-nemeses
   "Combinations of nemeses for tests"
   [[]
-   [:pause]
-   [:kill]
-   [:partition]
-   [:pause :kill :partition :clock]])
+;   [:pause]
+;   [:kill]
+;   [:partition]
+;   [:pause :kill :partition :clock]])
+  ])
 
 (def special-nemeses
   "A map of special nemesis names to collections of faults"
@@ -195,7 +196,7 @@
                                 (gen/clients fg))
                     generator)]
     (merge tests/noop-test
-           opts
+           (dissoc opts     :nemesis) ; TODO: we'll set a nemesis instead.
            (dissoc workload :generator :final-generator) ; These we handle
            {:name         (str "scylla " (name (:workload opts)))
             :os           debian/os
