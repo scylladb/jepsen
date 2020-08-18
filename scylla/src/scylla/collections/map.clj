@@ -1,16 +1,15 @@
 (ns scylla.collections.map
-  "TODO: what is this for? I think it's... a set? Backed by a CQL map?"
+  "A test for sets backed by CQL maps."
   (:require [clojure [pprint :refer :all]]
             [clojure.tools.logging :refer [info]]
             [jepsen
              [client    :as client]
              [checker   :as checker]
-             [generator :as gen]
-             [nemesis   :as nemesis]]
+             [generator :as gen]]
             [qbits.alia :as alia]
             [qbits.hayt :refer :all]
-            [scylla.core :refer :all]
-            [scylla.conductors :as conductors])
+            [scylla [client :as c]
+                    [db :as db]])
   (:import (clojure.lang ExceptionInfo)
            (com.datastax.driver.core.exceptions UnavailableException
                                                 WriteTimeoutException

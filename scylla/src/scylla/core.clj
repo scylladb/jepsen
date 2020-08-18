@@ -22,7 +22,8 @@
                     [counter        :as counter]
                     [db             :as db]
                     [generator      :as sgen]
-                    [mv             :as mv]])
+                    [mv             :as mv]]
+            [scylla.collections [map :as cmap]])
   (:import (clojure.lang ExceptionInfo)
            (com.datastax.driver.core Session)
            (com.datastax.driver.core Cluster)
@@ -39,6 +40,7 @@
    :cas-register    cas-register/workload
    :counter         counter/workload
    :counter-inc-dec counter/inc-dec-workload
+   :map             cmap/workload
    :mv              mv/workload})
 
 (def standard-workloads
