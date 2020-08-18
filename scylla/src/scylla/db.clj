@@ -52,7 +52,7 @@
 (defn disable-hints?
   "Returns true if Jepsen tests should run without hints"
   []
-  (not (System/getenv "JEPSEN_DISABLE_HINTS")))
+  (System/getenv "JEPSEN_DISABLE_HINTS"))
 
 (defn wait-for-recovery
   "Waits for the driver to report all nodes are up"
@@ -145,43 +145,22 @@
        (map dns-resolve)
        (str/join ",")))
 
-; TODO: startup indicated by log line "started listening for CQL clients"
-; Also checks for gossip messages
-; https://github.com/scylladb/scylla-ccm/blob/next/ccmlib/scylla_cluster.py#L76
-
 (defn configure!
-  "Uploads configuration files to the given node."
+  "Uploads configuration files to the current node."
   [node test]
-  (info node "configuring ScyllaDB")
+  (info "configuring ScyllaDB")
   (c/su
     (c/exec :echo (slurp (io/resource "default/scylla-server"))
             :> "/etc/default/scylla-server")
-   (doseq [rep (into ["\"s/.*cluster_name: .*/cluster_name: 'jepsen'/g\""
-                      "\"s/row_cache_size_in_mb: .*/row_cache_size_in_mb: 20/g\""
-                      (str "\"s/seeds: .*/seeds: '" (seeds test) "'/g\"")
-                      (str "\"s/listen_address: .*/listen_address: " (dns-resolve node)
-                           "/g\"")
-                      (str "\"s/rpc_address: .*/rpc_address: " (dns-resolve node) "/g\"")
-                      (str "\"s/broadcast_rpc_address: .*/broadcast_rpc_address: "
-                           (net/local-ip) "/g\"")
-                      "\"s/internode_compression: .*/internode_compression: none/g\""
-                      (str "\"s/hinted_handoff_enabled:.*/hinted_handoff_enabled: "
-                           (disable-hints?) "/g\"")
-                      "\"s/commitlog_sync: .*/commitlog_sync: batch/g\""
-                      (str "\"s/# commitlog_sync_batch_window_in_ms: .*/"
-                           "commitlog_sync_batch_window_in_ms: 1/g\"" )
-                      "\"s/commitlog_sync_period_in_ms: .*/#/g\""
-                      (str "\"s/# phi_convict_threshold: .*/phi_convict_threshold: " (phi-level)
-                           "/g\"")
-                      "\"s/# developer_mode: false/developer_mode: true/g\""
-                      "\"/auto_bootstrap: .*/d\""]
-                     (when (compressed-commitlog?)
-                       ["\"s/#commitlog_compression.*/commitlog_compression:/g\""
-                        (str "\"s/#   - class_name: LZ4Compressor/"
-                             "    - class_name: LZ4Compressor/g\"")]))]
-     (c/exec :sed :-i (lit rep) "/etc/scylla/scylla.yaml"))
-   (c/exec :echo (str "auto_bootstrap: "  true)
-           :>> "/etc/scylla/scylla.yaml")))
+    (c/exec :echo
+            (-> (io/resource "scylla.yaml")
+                slurp
+                (str/replace "$SEEDS"           (seeds test))
+                (str/replace "$LISTEN_ADDRESS"  (dns-resolve node))
+                (str/replace "$RPC_ADDRESS"     (dns-resolve node))
+                (str/replace "$HINTED_HANDOFF"  (str (not (disable-hints?))))
+                (str/replace "$PHI_LEVEL"       (str (phi-level))))
+            :> "/etc/scylla/scylla.yaml")))
 
 (defn start!
   "Starts ScyllaDB"

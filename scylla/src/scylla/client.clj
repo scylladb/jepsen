@@ -23,6 +23,19 @@
   ; TODO: Reconnection (see logs from
   ; com.datastax.driver.core.ControlConnection) has an exponential backoff by
   ; default which could mask errors--tune this to be more aggressive.
+
+  ; I've also seen clients created with custom load balancing policies like so:
+  ;(alia/cluster
+  ;  {:contact-points (:nodes test)
+  ;   :load-balancing-policy (load-balancing/whitelist-policy
+  ;                            (load-balancing/round-robin-policy)
+  ;                            (map (fn [node-name]
+  ;                                   (InetSocketAddress. node-name 9042))
+  ;                                 (if (= connect-type :single)
+  ;                                   (do
+  ;                                     (info "load balancing only" node)
+  ;                                     [(name node)])
+  ;                                   (:nodes test))))})
   (let [cluster (alia/cluster
                   {:contact-points [node]
                    ; We want to force all requests to go to this particular

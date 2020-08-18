@@ -20,7 +20,8 @@
                     [client     :as sc]
                     [counter    :as counter]
                     [db         :as db]
-                    [generator  :as sgen]])
+                    [generator  :as sgen]
+                    [mv         :as mv]])
   (:import (clojure.lang ExceptionInfo)
            (com.datastax.driver.core Session)
            (com.datastax.driver.core Cluster)
@@ -35,7 +36,8 @@
   workloads."
   {:batch-set       batch/set-workload
    :counter         counter/workload
-   :counter-inc-dec counter/inc-dec-workload})
+   :counter-inc-dec counter/inc-dec-workload
+   :mv              mv/workload})
 
 (def standard-workloads
   "The workload names we run for test-all by default."
@@ -218,6 +220,12 @@
      (meh (c/su (c/exec :killall :-9 :scylla-jmx :scylla))) [:killed node])
    (fn stop  [test node]
      (meh (db/guarded-start! node test)) [:restarted node])))
+
+; TODO: some tests intersperse
+; (sgen/conductor :replayer (gen/once {:type :info :f :replay}))
+; with their generators. As far as I can tell, this code doesn't actually
+; *work*, but we should figure out what replayer does and maybe make a nemesis
+; for it.
 
 (defn scylla-test
   "Takes test options from the CLI, all-tests, etc, and constructs a Jepsen
