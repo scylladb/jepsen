@@ -3,10 +3,12 @@
   (:require [clojure [pprint :refer :all]]
             [clojure.tools.logging :refer [info]]
             [jepsen
-             [client    :as client]
-             [checker   :as checker]
-             [generator :as gen]
-             [nemesis   :as nemesis]]
+             [client      :as client]
+             [checker     :as checker]
+             [generator   :as gen]
+             [independent :as independent]
+             [nemesis     :as nemesis]]
+            [jepsen.tests.linearizable-register :as lr]
             [knossos.model :as model]
             [qbits.alia :as alia]
             [qbits.hayt :refer :all]
@@ -48,37 +50,42 @@
       (c/with-errors op #{:read}
         (alia/execute s (use-keyspace :jepsen_keyspace))
         (case (:f op)
-          :cas (let [[old new] (:value op)
+          :cas (let [[k [old new]] (:value op)
                      result (alia/execute s
                                           (update :lwt
                                                   (set-columns {:value new})
-                                                  (where [[= :id 0]])
+                                                  (where [[= :id k]])
                                                   (only-if [[:value old]])))]
                  (if (-> result first ak)
                    (assoc op :type :ok)
                    (assoc op :type :fail :error (-> result first :value))))
 
-          :write (let [v (:value op)
-                       result (alia/execute s (update :lwt
-                                                      (set-columns {:value v})
-                                                      (only-if [[:in :value (range 5)]])
-                                                      (where [[= :id 0]])))]
+          :write (let [[k v] (:value op)
+                       result (alia/execute s
+                                (update :lwt
+                                        (set-columns {:value v})
+                                        (only-if [[:in :value (range 5)]])
+                                        (where [[= :id k]])))]
                    (if (-> result first ak)
+                     ; Great, we're done
                      (assoc op :type :ok)
+
+                     ; Didn't exist, back off to insert
                      (let [result' (alia/execute s (insert :lwt
-                                                           (values [[:id 0]
+                                                           (values [[:id k]
                                                                     [:value v]])
                                                            (if-exists false)))]
                        (if (-> result' first ak)
                          (assoc op :type :ok)
                          (assoc op :type :fail)))))
 
-          :read (let [v (->> (alia/execute s
-                                           (select :lwt (where [[= :id 0]]))
-                                           {:consistency :serial})
-                             first
+          :read (let [[k _] (:value op)
+                      v     (->> (alia/execute s
+                                               (select :lwt (where [[= :id k]]))
+                                               {:consistency :serial})
+                                 first
                              :value)]
-                  (assoc op :type :ok :value v))))))
+                  (assoc op :type :ok :value (independent/tuple k v)))))))
 
   (close! [_ _]
           (c/close! conn))
@@ -90,12 +97,11 @@
   []
   (->CasRegisterClient (atom false) nil))
 
-(defn r [_ _] {:type :invoke, :f :read, :value nil})
-(defn w [_ _] {:type :invoke :f :write :value (rand-int 5)})
-(defn cas [_ _] {:type :invoke :f :cas :value [(rand-int 5) (rand-int 5)]})
-
 (defn workload
+  "This workload performs read, write, and compare-and-set operations across a
+  set of linearizable registers. See jepsen.tests.linearizable-register for
+  more."
   [opts]
-  {:client (cas-register-client)
-   :generator (gen/mix [r w cas cas])
-   :checker   (checker/linearizable {:model (model/cas-register)})})
+  (assoc (lr/test {:nodes (:nodes opts)
+                   :model (model/cas-register)})
+         :client (cas-register-client)))
