@@ -48,7 +48,7 @@
   "Returns the value to use for phi in the failure detector"
   []
   (or (System/getenv "JEPSEN_PHI_VALUE")
-      8))
+      2))
 
 (defn disable-hints?
   "Returns true if Jepsen tests should run without hints"
@@ -181,10 +181,13 @@
     (setup! [db test node]
       (doto node
         (install! version)
-        (configure! test)
-        (guarded-start! test db))
-      (sc/close! (sc/await-open node))
-      (info "Scylla startup complete"))
+        (configure! test))
+      (let [t1 (util/linear-time-nanos)]
+        (guarded-start! node test db)
+        (sc/close! (sc/await-open node))
+        (info "Scylla startup complete in"
+              (float (util/nanos->secs (- (util/linear-time-nanos) t1)))
+              "seconds")))
 
     (teardown! [db test node]
       (db/kill! db test node)

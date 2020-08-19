@@ -242,7 +242,7 @@ batch_size_fail_threshold_in_kb: 50
 # be set to 0.0.0.0. If left blank, this will be set to the value of
 # rpc_address. If rpc_address is set to 0.0.0.0, broadcast_rpc_address must
 # be set.
-# roadcast_rpc_address: 
+# broadcast_rpc_address: 
 
 # Uncomment to enable experimental features
 # experimental_features:
@@ -501,4 +501,5 @@ auto_bootstrap: true
 
 # Try to speed up cluster formation
 ring_delay_ms: 3000
-skip_wait_for_gossip_to_settle: 5
+# skip_wait_for_gossip_to_settle: 5
+skip_wait_for_gossip_to_settle: 0

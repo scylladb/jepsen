@@ -8,6 +8,7 @@
             [clojure.set :as set]
             [clojure.tools.logging :refer [info]]
             [jepsen
+             [checker   :as checker]
              [cli       :as cli]
              [util      :as util :refer [meh timeout]]
              [control   :as c :refer [| lit]]
@@ -185,9 +186,7 @@
         nemesis  (nemesis/package
                    {:db         db
                     :faults     (set (:nemesis opts))
-                    :partition  {:targets [:one
-                                           :majority
-                                           :majorities-ring]}
+                    :partition  {:targets [:majority]}
                     :interval  (:nemesis-interval opts)})
         generator (->> (:generator workload)
                        (gen/stagger (/ (:rate opts)))
@@ -199,11 +198,18 @@
                                 (gen/log "Waiting for cluster to recover")
                                 (gen/sleep 10)
                                 (gen/clients fg))
-                    generator)]
+                    generator)
+        checker (checker/compose
+                  {:perf        (checker/perf {:nemeses (:perf nemesis)})
+                   :clock       (checker/clock-plot)
+                   :stats       (checker/stats)
+                   :exceptions  (checker/unhandled-exceptions)
+                   :workload    (:checker workload)})]
     (merge tests/noop-test
            opts
            (dissoc workload :generator :final-generator) ; These we handle
-           {:name         (str (name (:workload opts))
+           {:checker      checker
+            :name         (str (name (:workload opts))
                                " " (str/join "," (map name (:nemesis opts))))
             :os           debian/os
             :db           db
