@@ -9,79 +9,59 @@
             [qbits.alia :as alia]
             [qbits.alia.policy.retry :as retry]
             [qbits.hayt :refer :all]
-            [scylla [db :as db]])
-  (:import (clojure.lang ExceptionInfo)
-           (com.datastax.driver.core.exceptions UnavailableException
-                                                WriteTimeoutException
-                                                ReadTimeoutException
-                                                NoHostAvailableException)))
+            [scylla [client :as c]
+                    [db :as db]]))
 
-(defrecord CQLCounterClient [tbl-created? session writec]
+(defrecord CQLCounterClient [tbl-created? conn writec]
   client/Client
 
-  (open! [_ test _]
-    (let [cluster (alia/cluster {:contact-points (:nodes test)})
-          session (alia/connect cluster)]
-      (->CQLCounterClient tbl-created? session writec)))
+  (open! [this test node]
+    (assoc this :conn (c/open node)))
 
   (setup! [_ test]
-    (locking tbl-created?
-      (when
-       (compare-and-set! tbl-created? false true)
-        (alia/execute session (create-keyspace :jepsen_keyspace
-                                               (if-exists false)
-                                               (with {:replication {:class :SimpleStrategy
-                                                                    :replication_factor 3}})))
-        (alia/execute session (use-keyspace :jepsen_keyspace))
-        (alia/execute session (create-table :counters
-                                            (if-exists false)
-                                            (column-definitions {:id    :int
-                                                                 :count    :counter
-                                                                 :primary-key [:id]})
-                                            (with {:compaction {:class (db/compaction-strategy)}})))
-        (alia/execute session (update :counters
-                                      (set-columns :count [+ 0])
-                                      (where [[= :id 0]]))))))
+    (let [session (:session conn)]
+      (locking tbl-created?
+        (when
+          (compare-and-set! tbl-created? false true)
+          (alia/execute session (create-keyspace :jepsen_keyspace
+                                                 (if-exists false)
+                                                 (with {:replication {:class :SimpleStrategy
+                                                                      :replication_factor 3}})))
+          (alia/execute session (use-keyspace :jepsen_keyspace))
+          (alia/execute session (create-table :counters
+                                              (if-exists false)
+                                              (column-definitions {:id    :int
+                                                                   :count    :counter
+                                                                   :primary-key [:id]})
+                                              (with {:compaction {:class (db/compaction-strategy)}})))
+          (alia/execute session (update :counters
+                                        (set-columns :count [+ 0])
+                                        (where [[= :id 0]])))))))
 
   (invoke! [_ _ op]
-    (alia/execute session (use-keyspace :jepsen_keyspace))
-    (case (:f op)
-      :add (try (do
-                  (alia/execute session
-                                (update :counters
-                                        (set-columns {:count [+ (:value op)]})
-                                        (where [[= :id 0]]))
-                                {:consistency writec
-                                 :retry-policy (retry/fallthrough-retry-policy)})
-                  (assoc op :type :ok))
-                (catch UnavailableException e
-                  (assoc op :type :fail :error (.getMessage e)))
-                (catch WriteTimeoutException e
-                  (assoc op :type :info :value :timed-out))
-                (catch NoHostAvailableException e
-                  (info "All the servers are down - waiting 2s")
-                  (Thread/sleep 2000)
-                  (assoc op :type :fail :error (.getMessage e))))
-      :read (try
-              (let [value (->> (alia/execute session
-                                             (select :counters (where [[= :id 0]]))
-                                             {:consistency :all
-                                              :retry-policy (retry/fallthrough-retry-policy)})
-                               first
-                               :count)]
-                (assoc op :type :ok :value value))
-              (catch UnavailableException e
-                (info "Not enough replicas - failing")
-                (assoc op :type :fail :value (.getMessage e)))
-              (catch ReadTimeoutException e
-                (assoc op :type :fail :value :timed-out))
-              (catch NoHostAvailableException e
-                (info "All the servers are down - waiting 2s")
-                (Thread/sleep 2000)
-                (assoc op :type :fail :error (.getMessage e))))))
+    (let [s (:session conn)]
+      (c/with-errors op #{:read}
+        (alia/execute s (use-keyspace :jepsen_keyspace))
+        (case (:f op)
+          :add (do (alia/execute s
+                                 (update :counters
+                                         (set-columns {:count [+ (:value op)]})
+                                         (where [[= :id 0]]))
+                                 {:consistency writec
+                                  :retry-policy (retry/fallthrough-retry-policy)})
+                   (assoc op :type :ok))
+
+          :read (let [value (->> (alia/execute s
+                                               (select :counters (where [[= :id 0]]))
+                                               {:consistency :all
+                                                :retry-policy (retry/fallthrough-retry-policy)})
+                                 first
+                                 :count)]
+                    (assoc op :type :ok :value value))))))
+
 
   (close! [_ _]
-    (alia/shutdown session))
+    (c/close! conn))
 
   (teardown! [_ _]))
 
