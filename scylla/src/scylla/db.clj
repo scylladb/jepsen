@@ -13,7 +13,8 @@
              [client    :as client]
              [generator :as gen]
              [tests     :as tests]]
-            [jepsen.control [net :as net]]
+            [jepsen.control [net :as net]
+                            [util :as cu]]
             [jepsen.os.debian :as debian]
             [scylla [client :as sc]
                     [generator :as sgen]])
@@ -162,63 +163,62 @@
                 (str/replace "$PHI_LEVEL"       (str (phi-level))))
             :> "/etc/scylla/scylla.yaml")))
 
-(defn start!
-  "Starts ScyllaDB"
-  [node _]
-  (info node "starting ScyllaDB")
-  (c/su
-    (c/exec :service :scylla-server :start)
-    (info node "started ScyllaDB")))
-
 (defn guarded-start!
   "Guarded start that only starts nodes that have joined the cluster already
   through initial DB lifecycle or a bootstrap. It will not start decommissioned
   nodes."
-  [node test]
+  [node test db]
   (let [bootstrap     (:bootstrap test)
         decommission  (:decommission test)]
     (when-not (or (contains? @bootstrap node)
                   (->> node name dns-resolve (get decommission)))
-      (start! node test))))
-
-(defn stop!
-  "Stops ScyllaDB"
-  [node]
-  (info node "stopping ScyllaDB")
-  (c/su
-   (meh (c/exec :killall :scylla-jmx))
-   (while (str/includes? (c/exec :ps :-ef) "scylla-jmx")
-     (Thread/sleep 100))
-   (meh (c/exec :killall :scylla))
-   (while (str/includes? (c/exec :ps :-ef) "scylla")
-     (Thread/sleep 100)))
-  (info node "has stopped ScyllaDB"))
-
-(defn wipe!
-  "Shuts down Scylla and wipes data."
-  [node]
-  (stop! node)
-  (info node "deleting data files")
-  (c/su
-    ; TODO: wipe log files?
-    (meh (c/exec :rm :-rf (lit "/var/lib/scylla/data/*")))
-    (meh (c/exec :rm :-rf "/var/log/scylla/scylla.log"))))
+      (db/start! db test node))))
 
 (defn db
-  "New ScyllaDB run"
+  "Sets up and tears down ScyllaDB"
   [version]
   (reify db/DB
-    (setup! [_ test node]
+    (setup! [db test node]
       (doto node
         (install! version)
         (configure! test)
-        (guarded-start! test))
+        (guarded-start! test db))
       (sc/close! (sc/await-open node))
       (info "Scylla startup complete"))
 
-    (teardown! [_ test node]
-      (wipe! node))
+    (teardown! [db test node]
+      (db/kill! db test node)
+      (c/su
+        (info "deleting data files")
+        (meh (c/exec :rm :-rf (lit "/var/lib/scylla/data/*")))
+        (meh (c/exec :rm :-rf "/var/log/scylla/scylla.log"))))
 
     db/LogFiles
     (log-files [db test node]
-      ["/var/log/scylla/scylla.log"])))
+      ["/var/log/scylla/scylla.log"])
+
+    db/Process
+    (start! [_ test node]
+      (info "starting ScyllaDB")
+      (c/su
+        (c/exec :service :scylla-server :start)
+        (info "started ScyllaDB")))
+
+    (kill! [_ test node]
+      (info node "stopping ScyllaDB")
+      (c/su
+        (meh (c/exec :killall :scylla-jmx))
+        (while (str/includes? (c/exec :ps :-ef) "scylla-jmx")
+          (Thread/sleep 100))
+        (meh (c/exec :killall :scylla))
+        (while (str/includes? (c/exec :ps :-ef) "scylla")
+          (Thread/sleep 100))
+        (c/exec :service :scylla-server :stop))
+      (info node "has stopped ScyllaDB"))
+
+    db/Pause
+    (pause! [_ test node]
+      (c/su (cu/grepkill! :stop "/usr/bin/scylla")))
+
+    (resume! [_ test node]
+      (c/su (cu/grepkill! :cont :scylla)))))

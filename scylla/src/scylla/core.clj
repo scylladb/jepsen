@@ -22,7 +22,8 @@
                     [counter        :as counter]
                     [db             :as db]
                     [generator      :as sgen]
-                    [mv             :as mv]]
+                    [mv             :as mv]
+                    [nemesis        :as nemesis]]
             [scylla.collections [map :as cmap]
                                 [set :as cset]])
   (:import (clojure.lang ExceptionInfo)
@@ -55,18 +56,16 @@
 (def standard-nemeses
   "Combinations of nemeses for tests"
   [[]
-;   [:pause]
-;   [:kill]
-;   [:partition]
-;   [:pause :kill :partition :clock]])
-  ])
+   [:pause]
+   [:kill]
+   [:partition]
+   [:pause :kill :partition :clock]])
 
 (def special-nemeses
   "A map of special nemesis names to collections of faults"
   {:none      []
    :standard  [:pause :kill :partition :clock]
    :all       [:pause :kill :partition :clock]})
-
 
 (defn parse-nemesis-spec
   "Takes a comma-separated nemesis string and returns a collection of keyword
@@ -182,7 +181,14 @@
   test map."
   [opts]
   (let [workload ((workloads (:workload opts)) opts)
-        nemesis  nil
+        db       (db/db (:version opts))
+        nemesis  (nemesis/package
+                   {:db         db
+                    :faults     (set (:nemesis opts))
+                    :partition  {:targets [:one
+                                           :majority
+                                           :majorities-ring]}
+                    :interval  (:nemesis-interval opts)})
         generator (->> (:generator workload)
                        (gen/stagger (/ (:rate opts)))
                        (gen/nemesis (:generator nemesis))
@@ -195,11 +201,13 @@
                                 (gen/clients fg))
                     generator)]
     (merge tests/noop-test
-           (dissoc opts     :nemesis) ; TODO: we'll set a nemesis instead.
+           opts
            (dissoc workload :generator :final-generator) ; These we handle
-           {:name         (str "scylla " (name (:workload opts)))
+           {:name         (str (name (:workload opts))
+                               " " (str/join "," (map name (:nemesis opts))))
             :os           debian/os
-            :db           (db/db "4.2")
+            :db           db
+            :nemesis      (:nemesis nemesis)
             :logging      {:overrides
                            {"com.datastax.driver.core.Connection"   :error
                             "com.datastax.driver.core.ClockFactory" :error
