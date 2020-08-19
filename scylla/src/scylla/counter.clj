@@ -82,12 +82,3 @@
                    (cons r)
                    gen/mix)
    :checker   (checker/counter)})
-
-(defn inc-dec-workload
-  "A workload which has both increments and decrements."
-  [opts]
-  {:client (cql-counter-client)
-   :generator (->> (take 100 (cycle [add sub]))
-                   (cons r)
-                   gen/mix)
-   :checker (checker/counter)})

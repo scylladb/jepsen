@@ -40,7 +40,6 @@
   {:batch-set       batch/set-workload
    :cas-register    cas-register/workload
    :counter         counter/workload
-   :counter-inc-dec counter/inc-dec-workload
    :cmap            cmap/workload
    :mv              mv/workload
    :cset            cset/workload})
