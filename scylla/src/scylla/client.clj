@@ -7,6 +7,7 @@
             [slingshot.slingshot :refer [try+ throw+]])
   (:import (com.datastax.driver.core.exceptions NoHostAvailableException
                                                 ReadTimeoutException
+                                                TransportException
                                                 UnavailableException
                                                 WriteFailureException
                                                 WriteTimeoutException)
@@ -109,18 +110,27 @@
   `(try+ ~@body
          (catch NoHostAvailableException e#
            (throw+ {:type      :no-host-available
+                    :message   (.getMessage e#)
                     :definite? true}))
          (catch ReadTimeoutException e#
            (throw+ {:type      :read-timeout
+                    :message   (.getMessage e#)
+                    :definite? false}))
+         (catch TransportException e#
+           (throw+ {:type      :transport
+                    :message   (.getMessage e#)
                     :definite? false}))
          (catch UnavailableException e#
            (throw+ {:type      :unavailable
+                    :message   (.getMessage e#)
                     :definite? true}))
          (catch WriteFailureException e#
            (throw+ {:type      :write-failure
+                    :message   (.getMessage e#)
                     :definite? false}))
          (catch WriteTimeoutException e#
            (throw+ {:type      :write-timeout
+                    :message   (.getMessage e#)
                     :definite? false}))))
 
 (defmacro remap-errors
@@ -153,7 +163,7 @@
   operation is idempotent."
   [op idempotent? & body]
   `(try+ (remap-errors (slow-no-host-available ~@body))
-         (catch (contains? ~'% :definite?) e#
+         (catch (and (map? ~'%) (contains? ~'% :definite?)) e#
            (assoc ~op
                   :type (if (or (~idempotent? (:f ~op))
                                 (:definite? e#))
