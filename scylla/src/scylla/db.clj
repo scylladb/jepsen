@@ -193,8 +193,14 @@
       (db/kill! db test node)
       (c/su
         (info "deleting data files")
-        (meh (c/exec :rm :-rf (lit "/var/lib/scylla/data/*")))
-        (meh (c/exec :rm :-rf "/var/log/scylla/scylla.log"))))
+        (meh (c/exec :rm :-rf
+                     ; We leave directories in place; Scylla gets confused
+                     ; without them.
+                     (lit "/var/lib/scylla/data/*")
+                     (lit "/var/lib/scylla/commitlog/*")
+                     (lit "/var/lib/scylla/hints/*")
+                     (lit "/var/lib/scylla/view_hints/*")
+                     "/var/log/scylla/scylla.log"))))
 
     db/LogFiles
     (log-files [db test node]
@@ -210,12 +216,8 @@
     (kill! [_ test node]
       (info node "stopping ScyllaDB")
       (c/su
-        (meh (c/exec :killall :scylla-jmx))
-        (while (str/includes? (c/exec :ps :-ef) "scylla-jmx")
-          (Thread/sleep 100))
-        (meh (c/exec :killall :scylla))
-        (while (str/includes? (c/exec :ps :-ef) "scylla")
-          (Thread/sleep 100))
+        (cu/grepkill! "scylla-jmx")
+        (cu/grepkill! "scylla")
         (c/exec :service :scylla-server :stop))
       (info node "has stopped ScyllaDB"))
 
