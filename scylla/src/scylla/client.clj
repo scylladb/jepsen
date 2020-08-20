@@ -14,17 +14,27 @@
            (com.datastax.driver.core Session
                                      Cluster
                                      Metadata
-                                     Host)
+                                     Host
+                                     TimestampGenerator)
            (com.datastax.driver.core.policies RetryPolicy
                                               RetryPolicy$RetryDecision)))
+
+
+(defn chaotic-timestamps
+  "This timestamp generator returns randomly distributed values around now, but
+  with 100 seconds of uncertainty."
+  []
+  (reify TimestampGenerator
+      (next [x]
+        (let [uncertainty-window 100]
+          (* 1000
+             (+ (System/currentTimeMillis)
+                (rand-int (* uncertainty-window 1000))
+                (- (* uncertainty-window 1000))))))))
 
 (defn open
   "Returns an map of :cluster :session bound to the given node."
   [node]
-  ; TODO: Reconnection (see logs from
-  ; com.datastax.driver.core.ControlConnection) has an exponential backoff by
-  ; default which could mask errors--tune this to be more aggressive.
-
   ; I've also seen clients created with custom load balancing policies like so:
   ;(alia/cluster
   ;  {:contact-points (:nodes test)
@@ -45,7 +55,13 @@
                    ; requests to other nodes, we might fail to observe behavior
                    ; on isolated nodes during a partition.
                    :load-balancing-policy {:whitelist [{:hostname node
-                                                        :port 9042}]}})]
+                                                        :port 9042}]}
+                   ; By default the client has an exponential backoff on
+                   ; reconnect attempts, which can keep us from detecting when
+                   ; a node has come back
+                   :reconnection-policy {:type              :constant
+                                         :constant-delay-ms 1000}
+                   :timestamp-generator (chaotic-timestamps)})]
     (try (let [session (alia/connect cluster)]
            {:cluster cluster
             :session session})
