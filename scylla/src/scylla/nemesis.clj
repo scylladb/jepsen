@@ -74,7 +74,7 @@
 (defn after-times
   "All ops from gen at dt seconds, then 2dt seconds, then 3dt seconds, etc."
   [dt gen]
-  (->> (iterate (partial + dt) 0)
+  (->> (iterate (partial + dt) dt)
        (map util/secs->nanos)
        (map (partial after-time gen))))
 
@@ -85,10 +85,12 @@
   (let [g  (:generator pkg)
         fg (:final-generator pkg)]
     (assoc pkg :generator
-           (ordered-any (after-times 120 [(gen/log "Recovering...")
-                                         fg
-                                         (gen/sleep 60)])
-                        g))))
+           (ordered-any
+             [(after-times 60 [(gen/log "Recovering...")
+                               fg
+                               (gen/sleep 66666600)
+                               (gen/log "Recovery done, back to mischief")])]
+             g))))
 
 (defn package
   "Constructs a {:nemesis, :generator, :final-generator} map for the test.
