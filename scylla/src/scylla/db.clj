@@ -11,13 +11,11 @@
              [util      :as util :refer [meh timeout]]
              [control   :as c :refer [| lit]]
              [client    :as client]
-             [generator :as gen]
              [tests     :as tests]]
             [jepsen.control [net :as net]
                             [util :as cu]]
             [jepsen.os.debian :as debian]
-            [scylla [client :as sc]
-                    [generator :as sgen]])
+            [scylla [client :as sc]])
   (:import (clojure.lang ExceptionInfo)
            (com.datastax.driver.core Session)
            (com.datastax.driver.core Cluster)

@@ -80,15 +80,7 @@
   mapping x to (f x)"
   [f]
   (->> (range)
-       (map (fn [x] {:type :invoke :f :assoc :value {:k x
-                                                     :v (f x)}}))
-       gen/seq))
-
-(defn read-once
-  "A generator which reads exactly once."
-  []
-  (gen/clients
-   (gen/once {:type :invoke, :f :read})))
+       (map (fn [x] {:f :assoc :value {:k x, :v (f x)}}))))
 
 (defn workload
   [opts]
@@ -102,7 +94,7 @@
      ; here... what were they for?
      :generator (gen/phases
                   (gen/time-limit (/ tl 2) (assocs identity))
-                  (read-once)
+                  {:f :read}
                   (assocs -))
-     :final-generator (read-once)
+     :final-generator {:f :read}
      :checker (checker/associative-map)}))

@@ -12,7 +12,6 @@
              [cli       :as cli]
              [util      :as util :refer [meh timeout]]
              [control   :as c :refer [| lit]]
-             [client    :as client]
              [generator :as gen]
              [tests     :as tests]]
             [jepsen.control [net :as net]]
@@ -22,7 +21,6 @@
                     [client         :as sc]
                     [counter        :as counter]
                     [db             :as db]
-                    [generator      :as sgen]
                     [mv             :as mv]
                     [nemesis        :as nemesis]]
             [scylla.collections [map :as cmap]
@@ -85,15 +83,6 @@
                    1)]
     (Math/ceil (* v factor))))
 
-(defn bootstrap
-  "A generator that bootstraps nodes into the cluster with the given pause
-  and routes other :op's onward."
-  [pause src-gen]
-  (sgen/conductor :bootstrapper
-                  (gen/seq (cycle [(gen/sleep pause)
-                                   {:type :info :f :bootstrap}]))
-                  src-gen))
-
 (defn safe-mostly-small-nonempty-subset
   "Returns a subset of the given collection, with a logarithmically decreasing
   probability of selecting more elements. Always selects at least one element.
@@ -123,53 +112,6 @@
       set
       (set/difference @(:decommission test))
       shuffle))
-
-(defn test-aware-node-start-stopper
-  "Takes a targeting function which, given a list of nodes, returns a single
-  node or collection of nodes to affect, and two functions `(start! test node)`
-  invoked on nemesis start, and `(stop! test node)` invoked on nemesis stop.
-  Returns a nemesis which responds to :start and :stop by running the start!
-  and stop! fns on each of the given nodes. During `start!` and `stop!`, binds
-  the `jepsen.control` session to the given node, so you can just call `(c/exec
-  ...)`.
-
-  Re-selects a fresh node (or nodes) for each start--if targeter returns nil,
-  skips the start. The return values from the start and stop fns will become
-  the :values of the returned :info operations from the nemesis, e.g.:
-
-      {:value {:n1 [:killed \"java\"]}}"
-  [targeter start! stop!]
-  (let [nodes (atom nil)]
-    (reify client/Client
-      (setup! [this test _] this)
-
-      (invoke! [this test op]
-        (locking nodes
-          (assoc op :type :info, :value
-                 (case (:f op)
-                   :start (if-let [ns (-> test :nodes (targeter test) util/coll)]
-                            (if (compare-and-set! nodes nil ns)
-                              (c/on-many ns (start! test (keyword c/*host*)))
-                              (str "nemesis already disrupting " @nodes))
-                            :no-target)
-                   :stop (if-let [ns @nodes]
-                           (let [value (c/on-many ns (stop! test (keyword c/*host*)))]
-                             (reset! nodes nil)
-                             value)
-                           :not-started)))))
-
-      (teardown! [this test]))))
-
-; TODO: move this to scylla.nemesis
-(defn crash-nemesis
-  "A nemesis that crashes a random subset of nodes."
-  []
-  (test-aware-node-start-stopper
-   safe-mostly-small-nonempty-subset
-   (fn start [_ node]
-     (meh (c/su (c/exec :killall :-9 :scylla-jmx :scylla))) [:killed node])
-   (fn stop  [test node]
-     (meh (db/guarded-start! node test)) [:restarted node])))
 
 ; TODO: some tests intersperse
 ; (sgen/conductor :replayer (gen/once {:type :info :f :replay}))
@@ -223,8 +165,8 @@
             :bootstrap    (atom #{}) ; TODO: remove me
             :decommission (atom #{}) ; TODO: remove me
             :nonserializable-keys [:conductors] ; TODO: remove me
-            ; TODO: recovery and :final-generator, if applicable
-            :generator    generator})))
+            :generator    generator
+            :pure-generators true})))
 
 (def cli-opts
   "Options for test runners."

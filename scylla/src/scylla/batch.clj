@@ -79,16 +79,10 @@
   []
   (->BatchSetClient (atom false) nil))
 
-(defn adds
-  "Generator that emits :add operations for sequential integers."
-  []
-  (->> (range)
-       (map (fn [x] {:type :invoke, :f :add, :value x}))
-       gen/seq))
-
 (defn set-workload
   [opts]
   {:client          (batch-set-client)
-   :generator       (adds)
-   :final-generator (gen/once {:type :invoke, :f :read})
+   :generator       (->> (range)
+                         (map (fn [x] {:type :invoke, :f :add, :value x})))
+   :final-generator {:f :read}
    :checker         (checker/set)})

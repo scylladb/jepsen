@@ -73,16 +73,9 @@
   ([] (->CQLMapClient (atom false) nil :one))
   ([writec] (->CQLMapClient (atom false) nil writec)))
 
-(defn adds
-  "Generator that emits :add operations for sequential integers."
-  []
-  (->> (range)
-       (map (fn [x] {:type :invoke, :f :add, :value x}))
-       gen/seq))
-
 (defn workload
   [opts]
   {:client          (cql-map-client)
-   :generator       (adds)
-   :final-generator (gen/once {:type :invoke, :f :read})
+   :generator       (map (fn [x] {:f :add, :value x}) (range))
+   :final-generator {:f :read}
    :checker         (checker/set)})

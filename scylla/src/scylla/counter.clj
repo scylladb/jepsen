@@ -70,15 +70,11 @@
   ([] (->CQLCounterClient (atom false) nil :one))
   ([writec] (->CQLCounterClient (atom false) nil writec)))
 
-(def add {:type :invoke :f :add :value 1})
-(def sub {:type :invoke :f :add :value -1})
-(def r {:type :invoke :f :read})
-
 (defn workload
   "An increment-only counter workload."
   [opts]
   {:client    (cql-counter-client)
-   :generator (->> (repeat 100 add)
-                   (cons r)
-                   gen/mix)
+   :generator (gen/mix
+                (repeat {:f :add, :value 1})
+                (repeat {:f :read}))
    :checker   (checker/counter)})

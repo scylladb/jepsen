@@ -77,7 +77,6 @@
   [opts]
   {:client          (cql-set-client)
    :generator       (->> (range)
-                         (map (fn [x] {:type :invoke, :f :add, :value x}))
-                         gen/seq)
-   :final-generator (gen/once {:type :invoke, :f :read})
+                         (map (fn [x] {:f :add, :value x})))
+   :final-generator {:f :read}
    :checker         (checker/set)})
