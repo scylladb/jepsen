@@ -182,7 +182,7 @@
         (configure! test))
       (let [t1 (util/linear-time-nanos)]
         (guarded-start! node test db)
-        (sc/close! (sc/await-open node))
+        (sc/close! (sc/await-open test node))
         (info "Scylla startup complete in"
               (float (util/nanos->secs (- (util/linear-time-nanos) t1)))
               "seconds")))

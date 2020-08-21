@@ -20,25 +20,26 @@
   client/Client
 
   (open! [this test node]
-    (assoc this :conn (c/open node)))
+    (assoc this :conn (c/open test node)))
 
   (setup! [_ test]
     (let [s (:session conn)]
       (locking tbl-created?
         (when (compare-and-set! tbl-created? false true)
-          (alia/execute s (create-keyspace :jepsen_keyspace
-                                           (if-exists false)
-                                           (with {:replication {:class :SimpleStrategy
-                                                                :replication_factor 3}})))
-          (alia/execute s (use-keyspace :jepsen_keyspace))
-          (alia/execute s (create-table :maps
-                                        (if-exists false)
-                                        (column-definitions {:id    :int
-                                                             :elements    (map-type :int :int)
-                                                             :primary-key [:id]})
-                                        (with {:compaction {:class (db/compaction-strategy)}})))
-          (alia/execute s (insert :maps (values [[:id 0]
-                                                 [:elements {}]])))))))
+          (c/retry-each
+            (alia/execute s (create-keyspace :jepsen_keyspace
+                                             (if-exists false)
+                                             (with {:replication {:class :SimpleStrategy
+                                                                  :replication_factor 3}})))
+            (alia/execute s (use-keyspace :jepsen_keyspace))
+            (alia/execute s (create-table :maps
+                                          (if-exists false)
+                                          (column-definitions {:id    :int
+                                                               :elements    (map-type :int :int)
+                                                               :primary-key [:id]})
+                                          (with {:compaction {:class (db/compaction-strategy)}})))
+            (alia/execute s (insert :maps (values [[:id 0]
+                                                   [:elements {}]]))))))))
 
   (invoke! [_ test op]
     (let [s (:session conn)]
@@ -70,7 +71,7 @@
 
 (defn cql-map-client
   "A set implemented using CQL maps"
-  ([] (->CQLMapClient (atom false) nil :one))
+  ([]       (cql-map-client :one))
   ([writec] (->CQLMapClient (atom false) nil writec)))
 
 (defn workload

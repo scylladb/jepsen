@@ -160,7 +160,8 @@
                            {"com.datastax.driver.core.Connection"   :error
                             "com.datastax.driver.core.ClockFactory" :error
                             "com.datastax.driver.core.Session"      :error
-                            ;"com.datastax.driver.core.ControlConnection" :off
+                            "com.datastax.driver.core.ControlConnection" :off
+                            "com.datastax.driver.core.Cluster"      :warn
                             }}
             :bootstrap    (atom #{}) ; TODO: remove me
             :decommission (atom #{}) ; TODO: remove me
@@ -180,6 +181,10 @@
     :default  3
     :parse-fn read-string
     :validate [#(and (number? %) (pos? %)) "must be a positive number"]]
+
+   [nil "--[no-]noisy-timestamps" "If set, randomly fuzz timestamps to simulate behavior in a cluster without perfect clocks."
+    :flag     true
+    :default  true]
 
    ["-r" "--rate HZ" "Approximate number of requests per second per thread"
     :default 10

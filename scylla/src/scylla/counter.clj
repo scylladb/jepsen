@@ -16,7 +16,7 @@
   client/Client
 
   (open! [this test node]
-    (assoc this :conn (c/open node)))
+    (assoc this :conn (c/open test node)))
 
   (setup! [_ test]
     (let [session (:session conn)]
@@ -74,7 +74,6 @@
   "An increment-only counter workload."
   [opts]
   {:client    (cql-counter-client)
-   :generator (gen/mix
-                (repeat {:f :add, :value 1})
-                (repeat {:f :read}))
+   :generator (gen/mix [(repeat {:f :add, :value 1})
+                        (repeat {:f :read})])
    :checker   (checker/counter)})

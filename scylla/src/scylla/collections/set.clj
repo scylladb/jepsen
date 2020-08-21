@@ -16,7 +16,7 @@
   client/Client
 
   (open! [this test node]
-    (assoc this :conn (c/open node)))
+    (assoc this :conn (c/open test node)))
 
   (setup! [_ test]
     (let [s (:session conn)]

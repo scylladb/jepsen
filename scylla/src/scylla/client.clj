@@ -20,7 +20,7 @@
                                               RetryPolicy$RetryDecision)))
 
 
-(defn chaotic-timestamps
+(defn noisy-timestamps
   "This timestamp generator returns randomly distributed values around now, but
   with 100 seconds of uncertainty."
   []
@@ -34,7 +34,7 @@
 
 (defn open
   "Returns an map of :cluster :session bound to the given node."
-  [node]
+  [test node]
   ; I've also seen clients created with custom load balancing policies like so:
   ;(alia/cluster
   ;  {:contact-points (:nodes test)
@@ -47,21 +47,24 @@
   ;                                     (info "load balancing only" node)
   ;                                     [(name node)])
   ;                                   (:nodes test))))})
-  (let [cluster (alia/cluster
-                  {:contact-points [node]
-                   ; We want to force all requests to go to this particular
-                   ; node, to make sure that every node actually tries to
-                   ; execute requests--if we allow the smart client to route
-                   ; requests to other nodes, we might fail to observe behavior
-                   ; on isolated nodes during a partition.
-                   :load-balancing-policy {:whitelist [{:hostname node
-                                                        :port 9042}]}
-                   ; By default the client has an exponential backoff on
-                   ; reconnect attempts, which can keep us from detecting when
-                   ; a node has come back
-                   :reconnection-policy {:type              :constant
-                                         :constant-delay-ms 1000}
-                   :timestamp-generator (chaotic-timestamps)})]
+  (let [opts (cond->
+               {:contact-points [node]
+                ; We want to force all requests to go to this particular node,
+                ; to make sure that every node actually tries to execute
+                ; requests--if we allow the smart client to route requests to
+                ; other nodes, we might fail to observe behavior on isolated
+                ; nodes during a partition.
+                :load-balancing-policy {:whitelist [{:hostname node
+                                                     :port 9042}]}
+                ; By default the client has an exponential backoff on reconnect
+                ; attempts, which can keep us from detecting when a node has
+                ; come back
+                :reconnection-policy {:type              :constant
+                                      :constant-delay-ms 1000}}
+
+               (:noisy-timestamps test) (assoc :timestamp-generator
+                                               (noisy-timestamps)))
+        cluster (alia/cluster opts)]
     (try (let [session (alia/connect cluster)]
            {:cluster cluster
             :session session})
@@ -81,9 +84,9 @@
 
 (defn await-open
   "Blocks until a connection is available, then returns that connection."
-  [node]
-  (dt/with-retry [tries 32]
-    (let [c (open node)]
+  [test node]
+  (dt/with-retry [tries 60]
+    (let [c (open test node)]
       (info :session (:session c))
       (info :desc-cluster
             (alia/execute (:session c)
@@ -171,6 +174,11 @@
           (Thread/sleep 2000)
           (throw e#))))
 
+(defn known-error?
+  "For use in try+ catch expressions: is this thrown object one we generated?"
+  [ex]
+  (and (map? ex) (contains? ex :definite?)))
+
 (defmacro with-errors
   "Takes an operation, a set of :f's which are idempotent, and a body to
   evaluate. Evaluates body, slowing no-host-available errors, remapping errors
@@ -179,10 +187,36 @@
   operation is idempotent."
   [op idempotent? & body]
   `(try+ (remap-errors (slow-no-host-available ~@body))
-         (catch (and (map? ~'%) (contains? ~'% :definite?)) e#
+         (catch known-error? e#
            (assoc ~op
                   :type (if (or (~idempotent? (:f ~op))
                                 (:definite? e#))
                           :fail
                           :info)
                   :error e#))))
+
+(def retry-delay
+  "Roughly how long should we wait between auto-retry attempts, in millis?"
+  1000)
+
+(defn wrap-retry
+  "Takes a form and returns a form which is wrapped in remap-errors and a
+  transparent retry."
+  [form]
+  `(dt/with-retry [tries# 10]
+     (try+ (remap-errors ~form)
+           (catch known-error? e#
+             (when (zero? tries#)
+               (throw+ e#))
+             (info (pr-str (quote ~form)) "threw" e#
+                   "; automatically retrying")
+             (Thread/sleep (rand-int retry-delay))
+             (~'retry (dec tries#))))))
+
+(defmacro retry-each
+  "Schema creation and initial inserts of values tend to fail pretty often.
+  This macro takes a series of forms and evaluates them in order, retrying each
+  form if it throws a known Scylla error. Since these forms will be retried,
+  they need to be idempotent!"
+  [& forms]
+  (cons 'do (map wrap-retry forms)))

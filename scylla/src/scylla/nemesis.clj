@@ -88,7 +88,7 @@
            (ordered-any
              [(after-times 60 [(gen/log "Recovering...")
                                fg
-                               (gen/sleep 66666600)
+                               (gen/sleep 600)
                                (gen/log "Recovery done, back to mischief")])]
              g))))
 
@@ -103,4 +103,5 @@
                 {:partition {:targets [:majorities-ring ...]}}"
   [opts]
   (-> (nc/nemesis-package opts)
-      periodically-recover))
+      ; periodically-recover
+      ))
