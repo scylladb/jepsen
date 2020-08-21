@@ -20,17 +20,28 @@
                                               RetryPolicy$RetryDecision)))
 
 
+(defn naive-timestamps
+  "This timestamp generator uses System/currentTimeMillis as its source."
+  []
+  (reify TimestampGenerator
+    (next [x]
+      (-> (System/currentTimeMillis)
+          (* 1000)
+          long))))
+
 (defn noisy-timestamps
   "This timestamp generator returns randomly distributed values around now, but
   with 100 seconds of uncertainty."
   []
   (reify TimestampGenerator
-      (next [x]
-        (let [uncertainty-window 100]
-          (* 1000
-             (+ (System/currentTimeMillis)
-                (rand-int (* uncertainty-window 1000))
-                (- (* uncertainty-window 1000))))))))
+    (next [x]
+      (let [uncertainty-s   100
+            uncertainty-ms  (* 1000 uncertainty-s)]
+        (-> (System/currentTimeMillis)
+            (+ (rand-int uncertainty-ms))
+            (- (/ uncertainty-ms 2))
+            (* 1000)
+            long)))))
 
 (defn open
   "Returns an map of :cluster :session bound to the given node."

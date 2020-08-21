@@ -175,8 +175,11 @@
 (defn db
   "Sets up and tears down ScyllaDB"
   [version]
+  (let [tcpdump (db/tcpdump {:ports [9042]
+                             :filter "host 192.168.122.1"})]
   (reify db/DB
     (setup! [db test node]
+      (db/setup! tcpdump test node)
       (doto node
         (install! version)
         (configure! test))
@@ -198,11 +201,13 @@
                      (lit "/var/lib/scylla/commitlog/*")
                      (lit "/var/lib/scylla/hints/*")
                      (lit "/var/lib/scylla/view_hints/*")
-                     "/var/log/scylla/scylla.log"))))
+                     "/var/log/scylla/scylla.log")))
+      (db/teardown! tcpdump test node))
 
     db/LogFiles
     (log-files [db test node]
-      ["/var/log/scylla/scylla.log"])
+      (concat (db/log-files tcpdump test node)
+              ["/var/log/scylla/scylla.log"]))
 
     db/Process
     (start! [_ test node]
@@ -224,4 +229,4 @@
       (c/su (cu/grepkill! :stop "/usr/bin/scylla")))
 
     (resume! [_ test node]
-      (c/su (cu/grepkill! :cont :scylla)))))
+      (c/su (cu/grepkill! :cont :scylla))))))

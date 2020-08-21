@@ -19,24 +19,26 @@
     (assoc this :conn (c/open test node)))
 
   (setup! [_ test]
-    (let [session (:session conn)]
+    (let [s (:session conn)]
       (locking tbl-created?
-        (when
-          (compare-and-set! tbl-created? false true)
-          (alia/execute session (create-keyspace :jepsen_keyspace
-                                                 (if-exists false)
-                                                 (with {:replication {:class :SimpleStrategy
-                                                                      :replication_factor 3}})))
-          (alia/execute session (use-keyspace :jepsen_keyspace))
-          (alia/execute session (create-table :counters
-                                              (if-exists false)
-                                              (column-definitions {:id    :int
-                                                                   :count    :counter
-                                                                   :primary-key [:id]})
-                                              (with {:compaction {:class (db/compaction-strategy)}})))
-          (alia/execute session (update :counters
-                                        (set-columns :count [+ 0])
-                                        (where [[= :id 0]])))))))
+        (when (compare-and-set! tbl-created? false true)
+          (c/retry-each
+            (alia/execute s (create-keyspace
+                              :jepsen_keyspace
+                              (if-exists false)
+                              (with {:replication {:class :SimpleStrategy
+                                                   :replication_factor 3}})))
+            (alia/execute s (use-keyspace :jepsen_keyspace))
+            (alia/execute s (create-table
+                              :counters
+                              (if-exists false)
+                              (column-definitions {:id    :int
+                                                   :count    :counter
+                                                   :primary-key [:id]})
+                              (with {:compaction {:class (db/compaction-strategy)}})))
+            (alia/execute s (update :counters
+                                    (set-columns :count [+ 0])
+                                    (where [[= :id 0]]))))))))
 
   (invoke! [_ _ op]
     (let [s (:session conn)]

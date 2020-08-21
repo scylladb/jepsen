@@ -22,21 +22,24 @@
     (let [s (:session conn)]
       (locking tbl-created?
         (when (compare-and-set! tbl-created? false true)
-          (alia/execute s (create-keyspace :jepsen_keyspace
-                                           (if-exists false)
-                                           (with {:replication {:class :SimpleStrategy
-                                                                :replication_factor 3}})))
-          (alia/execute s (use-keyspace :jepsen_keyspace))
-          (alia/execute s (create-table :sets
-                                        (if-exists false)
-                                        (column-definitions {:id    :int
-                                                             :elements    (set-type :int)
-                                                             :primary-key [:id]})
-                                        (with {:compaction {:class (db/compaction-strategy)}})))
-          (alia/execute s (insert :sets
-                                  (values [[:id 0]
-                                           [:elements #{}]])
-                                  (if-exists false)))))))
+          (c/retry-each
+            (alia/execute s (create-keyspace
+                              :jepsen_keyspace
+                              (if-exists false)
+                              (with {:replication {:class :SimpleStrategy
+                                                   :replication_factor 3}})))
+            (alia/execute s (use-keyspace :jepsen_keyspace))
+            (alia/execute s (create-table
+                              :sets
+                              (if-exists false)
+                              (column-definitions {:id    :int
+                                                   :elements    (set-type :int)
+                                                   :primary-key [:id]})
+                              (with {:compaction {:class (db/compaction-strategy)}})))
+            (alia/execute s (insert :sets
+                                    (values [[:id 0]
+                                             [:elements #{}]])
+                                    (if-exists false))))))))
 
   (invoke! [_ test op]
     (let [s (:session conn)]

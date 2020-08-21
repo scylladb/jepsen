@@ -25,25 +25,29 @@
     (let [c (:session conn)]
       (locking tbl-created?
         (when (compare-and-set! tbl-created? false true)
-          (alia/execute c (create-keyspace :jepsen_keyspace
-                                           (if-exists false)
-                                           (with {:replication {:class :SimpleStrategy
-                                                                :replication_factor 3}})))
-          (alia/execute c (use-keyspace :jepsen_keyspace))
-          (alia/execute c (create-table :map
-                                        (if-exists false)
-                                        (column-definitions {:key    :int
-                                                             :value    :int
-                                                             :primary-key [:key]})
-                                        (with {:compaction {:class (db/compaction-strategy)}})))
-          (try (alia/execute c (str "CREATE MATERIALIZED VIEW mvmap AS SELECT"
-                                    " * FROM map WHERE value IS NOT NULL"
-                                    " AND key IS NOT NULL "
-                                    "PRIMARY KEY (value, key)"
-                                    "WITH compaction = "
-                                    "{'class' : '" (db/compaction-strategy)
-                                    "'};"))
-               (catch com.datastax.driver.core.exceptions.AlreadyExistsException e))))))
+          (c/retry-each
+            (alia/execute c (create-keyspace
+                              :jepsen_keyspace
+                              (if-exists false)
+                              (with {:replication {:class :SimpleStrategy
+                                                   :replication_factor 3}})))
+            (alia/execute c (use-keyspace :jepsen_keyspace))
+            (alia/execute c (create-table
+                              :map
+                              (if-exists false)
+                              (column-definitions {:key    :int
+                                                   :value    :int
+                                                   :primary-key [:key]})
+                              (with {:compaction {:class (db/compaction-strategy)}})))
+            (try (alia/execute
+                   c (str "CREATE MATERIALIZED VIEW mvmap AS SELECT"
+                          " * FROM map WHERE value IS NOT NULL"
+                          " AND key IS NOT NULL "
+                          "PRIMARY KEY (value, key)"
+                          "WITH compaction = "
+                          "{'class' : '" (db/compaction-strategy)
+                          "'};"))
+                 (catch com.datastax.driver.core.exceptions.AlreadyExistsException e)))))))
 
   (invoke! [_ _ op]
     (let [c (:session conn)]

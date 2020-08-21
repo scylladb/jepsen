@@ -18,21 +18,24 @@
     (assoc this :conn (c/open test node)))
 
   (setup! [_ test]
-    (let [session (:session conn)]
+    (let [s (:session conn)]
       (locking tbl-created?
         (when (compare-and-set! tbl-created? false true)
-          (alia/execute session (create-keyspace :jepsen_keyspace
-                                                 (if-exists false)
-                                                 (with {:replication {:class :SimpleStrategy
-                                                                      :replication_factor 3}})))
-          (alia/execute session (use-keyspace :jepsen_keyspace))
-          (alia/execute session (create-table :bat
-                                              (if-exists false)
-                                              (column-definitions {:pid    :int
-                                                                   :cid    :int
-                                                                   :value  :int
-                                                                   :primary-key [:pid :cid]})
-                                              (with {:compaction {:class (db/compaction-strategy)}})))))))
+          (c/retry-each
+            (alia/execute s (create-keyspace
+                              :jepsen_keyspace
+                              (if-exists false)
+                              (with {:replication {:class :SimpleStrategy
+                                                   :replication_factor 3}})))
+            (alia/execute s (use-keyspace :jepsen_keyspace))
+            (alia/execute s (create-table
+                              :bat
+                              (if-exists false)
+                              (column-definitions {:pid    :int
+                                                   :cid    :int
+                                                   :value  :int
+                                                   :primary-key [:pid :cid]})
+                              (with {:compaction {:class (db/compaction-strategy)}}))))))))
 
   (invoke! [this test op]
     (let [s (:session conn)]
