@@ -36,10 +36,7 @@
                                                    :elements    (set-type :int)
                                                    :primary-key [:id]})
                               (with {:compaction {:class (db/compaction-strategy)}})))
-            (alia/execute s (insert :sets
-                                    (values [[:id 0]
-                                             [:elements #{}]])
-                                    (if-exists false))))))))
+            )))))
 
   (invoke! [_ test op]
     (let [s (:session conn)]
