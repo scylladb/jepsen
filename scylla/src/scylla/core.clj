@@ -21,6 +21,7 @@
                     [client         :as sc]
                     [counter        :as counter]
                     [db             :as db]
+                    [list-append    :as list-append]
                     [mv             :as mv]
                     [nemesis        :as nemesis]]
             [scylla.collections [map :as cmap]
@@ -41,6 +42,7 @@
    :cas-register    cas-register/workload
    :counter         counter/workload
    :cmap            cmap/workload
+   :list-append     list-append/workload
    :mv              mv/workload
    :cset            cset/workload})
 
@@ -183,7 +185,6 @@
     :validate [#(and (number? %) (pos? %)) "must be a positive number"]]
 
    [nil "--[no-]noisy-timestamps" "If set, randomly fuzz timestamps to simulate behavior in a cluster without perfect clocks."
-    :flag     true
     :default  true]
 
    ["-r" "--rate HZ" "Approximate number of requests per second per thread"
