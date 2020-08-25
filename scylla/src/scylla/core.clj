@@ -17,6 +17,7 @@
             [jepsen.control [net :as net]]
             [jepsen.os.debian :as debian]
             [scylla [batch          :as batch]
+                    [batch-return   :as batch-return]
                     [cas-register   :as cas-register]
                     [client         :as sc]
                     [counter        :as counter]
@@ -39,6 +40,7 @@
   "A map of workload names to functions that can take opts and construct
   workloads."
   {:batch-set       batch/set-workload
+   :batch-return    batch-return/workload
    :cas-register    cas-register/workload
    :counter         counter/workload
    :cmap            cmap/workload

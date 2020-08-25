@@ -157,9 +157,4 @@
   [opts]
   (let [w (append/test opts)]
     (assoc w
-           :client (Client. nil)
-           :generator (->> (:generator w)
-                           (gen/filter (fn [op]
-                                         (let [txn (:value op)]
-                                           (or (append-only? txn)
-                                               (= 1 (count txn))))))))))
+           :client (Client. nil))))
