@@ -111,8 +111,16 @@
       (not= (distinct (map :key query))
             (distinct (map :key result)))
       (conj {:type      :out-of-order
-             :expected  (map :key query)
-             :received  (map :key result)
+             :expected  (distinct (map :key query))
+             :received  (distinct (map :key result))
+             :query     query
+             :result    result})
+
+      (or (some nil? (map :part result))
+          (some nil? (map :key result)))
+      (conj {:type      :nil-key-or-part
+             :nil-key   (remove :key result)
+             :nil-part  (remove :part result)
              :query     query
              :result    result}))))
 
