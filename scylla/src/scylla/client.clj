@@ -1,6 +1,7 @@
 (ns scylla.client
   "Basic Scylla client operations."
   (:require [qbits.alia :as alia]
+            [qbits.alia.policy [load-balancing :as load-balancing]]
             [qbits.hayt :as hayt]
             [dom-top.core :as dt]
             [clojure.tools.logging :refer [info warn]]
@@ -17,7 +18,8 @@
                                      Host
                                      TimestampGenerator)
            (com.datastax.driver.core.policies RetryPolicy
-                                              RetryPolicy$RetryDecision)))
+                                              RetryPolicy$RetryDecision)
+           (java.net InetSocketAddress)))
 
 
 (defn naive-timestamps
@@ -46,27 +48,23 @@
 (defn open
   "Returns an map of :cluster :session bound to the given node."
   [test node]
-  ; I've also seen clients created with custom load balancing policies like so:
-  ;(alia/cluster
-  ;  {:contact-points (:nodes test)
-  ;   :load-balancing-policy (load-balancing/whitelist-policy
-  ;                            (load-balancing/round-robin-policy)
-  ;                            (map (fn [node-name]
-  ;                                   (InetSocketAddress. node-name 9042))
-  ;                                 (if (= connect-type :single)
-  ;                                   (do
-  ;                                     (info "load balancing only" node)
-  ;                                     [(name node)])
-  ;                                   (:nodes test))))})
   (let [opts (cond->
                {:contact-points [node]
                 ; We want to force all requests to go to this particular node,
                 ; to make sure that every node actually tries to execute
                 ; requests--if we allow the smart client to route requests to
                 ; other nodes, we might fail to observe behavior on isolated
-                ; nodes during a partition.
-                :load-balancing-policy {:whitelist [{:hostname node
-                                                     :port 9042}]}
+                ; nodes during a partition. The docs suggest this works, but it
+                ; looks like it doesn't actually in practice:
+                ;:load-balancing-policy {:whitelist [{:hostname node
+                ;                                     :port 9042}]}
+                ; This *mostly* works. It looks like table creation and some
+                ; other queries still get routed to other nodes, but at least
+                ; DML goes to only the specified node?
+                :load-balancing-policy
+                (load-balancing/whitelist-policy
+                  (load-balancing/round-robin-policy)
+                  [(InetSocketAddress. node 9042)])
                 ; By default the client has an exponential backoff on reconnect
                 ; attempts, which can keep us from detecting when a node has
                 ; come back
