@@ -38,7 +38,8 @@
                       ; This trivial IF always returns true.
                       (h/only-if [[= :lwt_dummy nil]]))
     :r (h/update (table-for test k)
-                 (h/set-columns {:lwt_dummy nil})
+                 (h/set-columns {:lwt_dummy nil
+                                 :value [+ []]})
                  (h/where [[= :part 0]
                            [= :id k]])
                  (h/only-if [[= :lwt_dummy nil]]))))
@@ -50,41 +51,64 @@
   (let [queries (map (partial mop-query test) txn)
         _ (info :queries queries)
         results (a/execute session (h/batch (apply h/queries queries)))]
+    (info :batch-results results)
     (assert (= (count queries) (count results))
             (str "Didn't get enough results for txn " txn ": " (pr-str results)))
-    (map (fn [[f k v :as mop] res]
-           (info :res [f k v] (pr-str res))
-           (case f
-             :r     [f k (:value res)]
-             :append mop))
-         txn
-         results)))
+    (mapv (fn [[f k v :as mop] res]
+            (info :res [f k v] (pr-str res))
+            (assert (= k (:id res))
+                    (str "Batch result's :id " (:id res)
+                         " didn't match expected key " k))
+            (case f
+              :r     [f k (:value res)]
+              :append mop))
+          txn
+          results)))
 
-(defn read
-  "Takes a test, session, and a transaction. Assuming that all keys are in the
-  same table, performs a single CQL select of all keys in the transaction, and
-  returns the transaction with the values for those keys."
+(defn single-read
+  "Takes a test, session, and a transaction with a single read mop. performs a
+  single CQL select by primary key, and returns the completed txn."
+  [test session [[f k v]]]
+  [[f k (->> (a/execute session
+                        (h/select (table-for test k)
+                                  (h/where [[= :part 0]
+                                            [= :id   k]]))
+                        {:consistency :serial})
+             first
+             :value)]])
+
+(defn single-append!
+  "Takes a test, session, and a transaction with a single append mop. Performs
+  the append via a CQL conditional update."
   [test session txn]
-  (let [ks        (distinct (map second txn))
-        _         (prn :ks ks)
-        table     (table-for test (first ks))
-        results   (->> (a/execute session (h/select table
-                                                    (h/where [[= :part 0]
-                                                              [:in :id ks]]))
-                                  {:consistency :serial})
-                       (map (juxt :id :value))
-                       (into {}))]
-    (mapv (fn [[f k _]] [f k (results k)]) txn)))
+  (let [[f k v] (first txn)]
+    (a/execute session
+               (h/update (table-for test k)
+                         (h/set-columns {:value [+ [v]]})
+                         (h/where [[= :part 0]
+                                   [= :id k]])
+                         (h/only-if [[= :lwt_dummy nil]]))))
+  txn)
 
-(defn write-only?
-  "Is this operation a write-only txn?"
-  [op]
-  (every? (comp #{:append} first) (:value op)))
+(defn append-only?
+  "Is this txn append-only?"
+  [txn]
+  (every? (comp #{:append} first) txn))
 
 (defn read-only?
-  "Is this operation a read-only txn?"
-  [op]
-  (every? (comp #{:r} first) (:value op)))
+  "Is this txn read-only?"
+  [txn]
+  (every? (comp #{:r} first) txn))
+
+(defn apply-txn!
+  "Takes a test, a session, and a txn. Performs the txn, returning the
+  completed txn."
+  [test session txn]
+  (if (= 1 (count txn))
+    (cond (read-only?   txn) (single-read     test session txn)
+          (append-only? txn) (single-append!  test session txn)
+          true               (assert false "what even is this"))
+    (apply-batch! test session txn)))
 
 (defrecord Client [conn]
   client/Client
@@ -121,24 +145,21 @@
         (a/execute s (h/use-keyspace :jepsen_keyspace))
         (assoc op
                :type  :ok
-               :value (apply-batch! test s (:value op))))))
+               :value (apply-txn! test s (:value op))))))
 
   (close! [this test]
     (c/close! conn))
 
   (teardown! [this test]))
 
-(defn valid-op?
-  "Is this operation a read- or write-only txn?"
-  [op]
-  (or (write-only? op)
-      (read-only? op)))
-
 (defn workload
   "See options for jepsen.tests.append/test"
   [opts]
   (let [w (append/test opts)]
-    ; CQL can't do mixed read-write queries, so we filter ourselves to
-    ; write-only and read-only workloads.
     (assoc w
-           :client (Client. nil))))
+           :client (Client. nil)
+           :generator (->> (:generator w)
+                           (gen/filter (fn [op]
+                                         (let [txn (:value op)]
+                                           (or (append-only? txn)
+                                               (= 1 (count txn))))))))))

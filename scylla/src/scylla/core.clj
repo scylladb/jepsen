@@ -10,7 +10,7 @@
             [jepsen
              [checker   :as checker]
              [cli       :as cli]
-             [util      :as util :refer [meh timeout]]
+             [util      :as util :refer [meh timeout parse-long]]
              [control   :as c :refer [| lit]]
              [generator :as gen]
              [tests     :as tests]]
@@ -173,7 +173,19 @@
 
 (def cli-opts
   "Options for test runners."
-  [[nil "--nemesis FAULTS" "A comma-separated list of nemesis faults to enable"
+  [[nil "--key-count INT" "For the append test, how many keys should we test at once?"
+    :parse-fn parse-long
+    :validate [pos? "must be positive"]]
+
+   [nil "--max-txn-length INT" "What's the most operations we can execute per transaction?"
+    :parse-fn parse-long
+    :validate [pos? "must be positive"]]
+
+   [nil "--max-writes-per-key INT" "How many writes can we perform to any single key, for append tests?"
+    :parse-fn parse-long
+    :validate [pos? "must be positive"]]
+
+   [nil "--nemesis FAULTS" "A comma-separated list of nemesis faults to enable"
     :parse-fn parse-nemesis-spec
     :validate [(partial every? (into nemeses (keys special-nemeses)))
                (str "Faults must be one of " nemeses " or "
