@@ -57,7 +57,8 @@
                            (h/select table
                                      (h/where [[= :part 0]
                                                [:in :id ks]]))
-                           {:consistency :serial})
+                           {:consistency        :serial
+                            :serial-consistency :serial})
         values  (into {} (map (juxt :id (comp maybe-long :value)) results))]
     (mapv (fn [[f k v]] [f k (get values k)]) txn)))
 
@@ -69,7 +70,8 @@
                         (h/select (table-for test k)
                                   (h/where [[= :part 0]
                                             [= :id   k]]))
-                        {:consistency :serial})
+                        {:consistency         :serial
+                         :serial-consistency  :serial})
              first
              :value
              maybe-long)]])
