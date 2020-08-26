@@ -24,7 +24,8 @@
                     [db             :as db]
                     [list-append    :as list-append]
                     [mv             :as mv]
-                    [nemesis        :as nemesis]]
+                    [nemesis        :as nemesis]
+                    [wr-register    :as wr-register]]
             [scylla.collections [map :as cmap]
                                 [set :as cset]])
   (:import (clojure.lang ExceptionInfo)
@@ -46,7 +47,8 @@
    :cmap            cmap/workload
    :list-append     list-append/workload
    :mv              mv/workload
-   :cset            cset/workload})
+   :cset            cset/workload
+   :wr-register     wr-register/workload})
 
 (def standard-workloads
   "The workload names we run for test-all by default."
