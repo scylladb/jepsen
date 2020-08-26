@@ -15,7 +15,8 @@
             [jepsen.control [net :as net]
                             [util :as cu]]
             [jepsen.os.debian :as debian]
-            [scylla [client :as sc]])
+            [scylla [client :as sc]]
+            [slingshot.slingshot :refer [try+ throw+]])
   (:import (clojure.lang ExceptionInfo)
            (com.datastax.driver.core Session)
            (com.datastax.driver.core Cluster)
@@ -110,6 +111,13 @@
   [node version]
   (c/su
     (c/cd "/tmp"
+          ; Scylla has a mandatory dep on jdk8
+          (info "installing JDK8")
+          ; LIVE DANGEROUSLY
+          (c/exec :wget :-qO :- "https://adoptopenjdk.jfrog.io/adoptopenjdk/api/gpg/key/public" | :apt-key :add :-)
+          (debian/add-repo! "adoptopenjdk" "deb  [arch=amd64] https://adoptopenjdk.jfrog.io/adoptopenjdk/deb/ buster main")
+          (debian/install [:adoptopenjdk-8-hotspot])
+
           (info "installing ScyllaDB")
           (debian/add-repo!
             "scylla"
@@ -221,7 +229,10 @@
       (c/su
         (cu/grepkill! "scylla-jmx")
         (cu/grepkill! "scylla")
-        (c/exec :service :scylla-server :stop))
+        (try+ (c/exec :service :scylla-server :stop)
+              (catch [:exit 5] e
+                ; Not installed yet
+                )))
       (info node "has stopped ScyllaDB"))
 
     db/Pause
