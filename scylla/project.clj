@@ -12,6 +12,8 @@
                  [com.codahale.metrics/metrics-core "3.0.2"]
                  [com.scylladb/scylla-driver-core "3.7.1-scylla-2"]]
   :main scylla.core
+  :jvm-opts ["-Djava.awt.headless=true"
+             "-server"]
   :test-selectors {:steady :steady
                    :bootstrap :bootstrap
                    :map :map
