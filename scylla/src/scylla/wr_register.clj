@@ -41,7 +41,9 @@
                                  (h/only-if [[= :lwt_dummy nil]])))
                      txn)
         ; _ (info :queries queries)
-        results (a/execute session (h/batch (apply h/queries queries)))]
+        results (a/execute session (h/batch (apply h/queries queries))
+                           {:consistency        :quorum
+                            :serial-consistency :serial})]
     ; Batch results make no sense so we... just ignore them. Wooo!)
     txn))
 
@@ -58,23 +60,10 @@
                                      (h/where [[= :part 0]
                                                [:in :id ks]]))
                            {:consistency        :serial
-                            :serial-consistency :serial})
+                            ;:serial-consistency :serial
+                            })
         values  (into {} (map (juxt :id (comp maybe-long :value)) results))]
     (mapv (fn [[f k v]] [f k (get values k)]) txn)))
-
-(defn single-read
-  "Takes a test, session, and a transaction with a single read mop. performs a
-  single CQL select by primary key, and returns the completed txn."
-  [test session [[f k v]]]
-  [[f k (->> (a/execute session
-                        (h/select (table-for test k)
-                                  (h/where [[= :part 0]
-                                            [= :id   k]]))
-                        {:consistency         :serial
-                         :serial-consistency  :serial})
-             first
-             :value
-             maybe-long)]])
 
 (defn single-write!
   "Takes a test, session, and a transaction with a single write mop. Performs
@@ -86,8 +75,25 @@
                          (h/set-columns {:value v})
                          (h/where [[= :part 0]
                                    [= :id k]])
-                         (h/only-if [[= :lwt_dummy nil]]))))
+                         (h/only-if [[= :lwt_dummy nil]]))
+               {:consistency        :quorum
+                :serial-consistency :serial}))
   txn)
+
+(defn single-read
+  "Takes a test, session, and a transaction with a single read mop. performs a
+  single CQL select by primary key, and returns the completed txn."
+  [test session [[f k v]]]
+  [[f k (->> (a/execute session
+                        (h/select (table-for test k)
+                                  (h/where [[= :part 0]
+                                            [= :id   k]]))
+                        {:consistency         :serial
+                         ; :serial-consistency  :serial
+                         })
+             first
+             :value
+             maybe-long)]])
 
 (defn write-only?
   "Is this txn write-only?"
