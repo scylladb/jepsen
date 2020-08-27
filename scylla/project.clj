@@ -13,6 +13,7 @@
                  [com.scylladb/scylla-driver-core "3.7.1-scylla-2"]]
   :main scylla.core
   :jvm-opts ["-Djava.awt.headless=true"
+             "-Xmx6g"
              "-server"]
   :test-selectors {:steady :steady
                    :bootstrap :bootstrap
