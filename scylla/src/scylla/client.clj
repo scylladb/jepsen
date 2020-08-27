@@ -132,6 +132,36 @@
         (RetryPolicy$RetryDecision/rethrow)
         (RetryPolicy$RetryDecision/retry cl)))))
 
+(defn read-opts
+  "Returns an options map, suitable for passing to alia/execute!, for a read.
+  Uses the `test` to decide what :consistency and :serial-consistency to use.
+  Will not include keys when a test's values are `nil`, which means you can
+  write
+
+    (merge {:consistency :quorum} (read-options test))
+
+  to provide default options suitable for your workload."
+  [test]
+  (let [c (:read-consistency test)]
+    (cond-> {}
+      c (assoc :consistency c))))
+
+(defn write-opts
+  "Returns an options map, suitable for passing to alia/execute!, for a write.
+  Uses the `test` to decide what :consistency and :serial-consistency to use.
+  Will not include keys when a test's values are `nil`, which means you can
+  write
+
+    (merge {:consistency :quorum} (write-options test))
+
+  to provide default options suitable for your workload."
+  [test]
+  (let [c  (:write-consistency test)
+        sc (:write-serial-consistency test)]
+    (cond-> {}
+      c  (assoc :consistency c)
+      sc (assoc :serial-consistency sc))))
+
 (defmacro remap-errors-helper
   "Basic error remapping. See remap-errors."
   [& body]

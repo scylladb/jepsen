@@ -12,7 +12,7 @@
             [scylla [client :as c]
                     [db :as db]]))
 
-(defrecord CQLSetClient [tbl-created? conn writec]
+(defrecord CQLSetClient [tbl-created? conn]
   client/Client
 
   (open! [this test node]
@@ -48,14 +48,19 @@
                                (update :sets
                                        (set-columns {:elements [+ #{(:value op)}]})
                                        (where [[= :id 0]]))
-                               {:consistency writec})
+                               (merge {:consistency :one}
+                                      (c/write-opts test)))
                  (assoc op :type :ok))
+
           :read (do (db/wait-for-recovery 30 s)
                     (let [value (->> (alia/execute s
                                                    (select :sets
                                                            (where [[= :id 0]]))
-                                                   {:consistency :all
-                                                    :retry-policy c/aggressive-read})
+                                                   ; TODO: is ALL really what
+                                                   ; we want?
+                                                   (merge {:consistency :all
+                                                           :retry-policy c/aggressive-read})
+                                                   (c/read-opts test))
                                      first
                                      :elements
                                      (into (sorted-set)))]
@@ -68,10 +73,8 @@
 
 (defn cql-set-client
   "A set implemented using CQL sets"
-  ([] (->CQLSetClient (atom false) nil :one))
-  ([writec] (->CQLSetClient (atom false) nil writec)))
-
-
+  []
+  (->CQLSetClient (atom false) nil))
 
 (defn workload
   [opts]

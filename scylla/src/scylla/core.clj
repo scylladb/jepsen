@@ -27,15 +27,9 @@
                     [nemesis        :as nemesis]
                     [wr-register    :as wr-register]]
             [scylla.collections [map :as cmap]
-                                [set :as cset]])
-  (:import (clojure.lang ExceptionInfo)
-           (com.datastax.driver.core Session)
-           (com.datastax.driver.core Cluster)
-           (com.datastax.driver.core Metadata)
-           (com.datastax.driver.core Host)
-           (com.datastax.driver.core.policies RetryPolicy
-                                              RetryPolicy$RetryDecision)
-           (java.net InetAddress)))
+                                [set :as cset]]
+            [qbits.commons.enum])
+  (:import (com.datastax.driver.core ConsistencyLevel)))
 
 (def workloads
   "A map of workload names to functions that can take opts and construct
@@ -175,6 +169,12 @@
             :generator    generator
             :pure-generators true})))
 
+(prn qbits.alia.enum/consistency-level)
+
+(def consistency-levels
+  "A set of keyword consistency levels the C* driver supports."
+  (set (keys (qbits.commons.enum/enum->map ConsistencyLevel))))
+
 (def cli-opts
   "Options for test runners."
   [[nil "--key-count INT" "For the append test, how many keys should we test at once?"
@@ -208,12 +208,26 @@
     :parse-fn read-string
     :validate [#(and (number? %) (pos? %)) "must be a positive number"]]
 
+   [nil "--read-consistency LEVEL" "What consistency level should we set for reads?"
+    :parse-fn keyword
+    :validate [consistency-levels (cli/one-of consistency-levels)]]
+
    ["-v" "--version VERSION" "What version of Scylla should we test?"
     :default "4.2"]
 
    ["-w" "--workload NAME" "What workload should we run?"
     :parse-fn keyword
-    :validate [workloads (cli/one-of workloads)]]])
+    :validate [workloads (cli/one-of workloads)]]
+
+   [nil "--write-consistency LEVEL"
+    "What consistency level should we set for writes?"
+    :parse-fn keyword
+    :validate [consistency-levels (cli/one-of consistency-levels)]]
+
+   [nil "--write-serial-consistency LEVEL"
+    "What consistency level should we set for writes?"
+    :parse-fn keyword
+    :validate [consistency-levels (cli/one-of consistency-levels)]]])
 
 (defn all-tests
   "Takes parsed CLI options and constructs a sequence of test options, by

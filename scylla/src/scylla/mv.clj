@@ -15,7 +15,7 @@
   (:import (clojure.lang ExceptionInfo)
            (java.net InetSocketAddress)))
 
-(defrecord MVMapClient [tbl-created? conn read-cl]
+(defrecord MVMapClient [tbl-created? conn]
   client/Client
 
   (open! [this test node]
@@ -58,12 +58,16 @@
                                    (update :map
                                            (set-columns {:value (:v (:value op))})
                                            (where [[= :key (:k (:value op))]]))
-                                   {:consistency :one
-                                    :retry-policy (retry/fallthrough-retry-policy)})
+                                   (merge {:consistency :one
+                                           :retry-policy (retry/fallthrough-retry-policy)}
+                                          (c/write-opts test)))
                      (assoc op :type :ok))
           :read (let [value (->> (alia/execute c
                                                (select :mvmap)
-                                               {:consistency read-cl})
+                                               ; TODO: do we really want ALL
+                                               ; here?
+                                               (merge {:consistency :all}
+                                                      (c/read-opts test)))
                                  (#(zipmap (map :key %) (map :value %))))]
                   (assoc op :type :ok :value value))))))
 
@@ -75,9 +79,7 @@
 (defn mv-map-client
   "A map implemented using MV"
   ([]
-   (->MVMapClient (atom false) nil :all))
-  ([read-cl]
-   (->MVMapClient (atom false) nil read-cl)))
+   (->MVMapClient (atom false) nil)))
 
 (defn assocs
   "Generator that emits :assoc operations for sequential integers,

@@ -16,7 +16,7 @@
                                                 ReadTimeoutException
                                                 NoHostAvailableException)))
 
-(defrecord CQLMapClient [tbl-created? conn writec]
+(defrecord CQLMapClient [tbl-created? conn]
   client/Client
 
   (open! [this test node]
@@ -48,14 +48,19 @@
                                  (update :maps
                                          (set-columns {:elements [+ {(:value op) (:value op)}]})
                                          (where [[= :id 0]]))
-                                 {:consistency writec})
+                                 (merge {:consistency :one}
+                                        (c/write-opts test)))
 
                    (assoc op :type :ok))
           :read (do (db/wait-for-recovery 30 s)
                     (let [value (->> (alia/execute s
                                                    (select :maps (where [[= :id 0]]))
-                                                   {:consistency :all
-                                                    :retry-policy c/aggressive-read})
+                                                   (merge
+                                                     ; TODO: do we really want
+                                                     ; ALL?
+                                                     {:consistency :all
+                                                      :retry-policy c/aggressive-read}
+                                                     (c/read-opts test)))
                                      first
                                      :elements
                                      vals
@@ -69,8 +74,8 @@
 
 (defn cql-map-client
   "A set implemented using CQL maps"
-  ([]       (cql-map-client :one))
-  ([writec] (->CQLMapClient (atom false) nil writec)))
+  []
+  (->CQLMapClient (atom false) nil))
 
 (defn workload
   [opts]

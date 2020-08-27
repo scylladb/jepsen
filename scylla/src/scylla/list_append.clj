@@ -50,7 +50,8 @@
   [test session txn]
   (let [queries (map (partial mop-query test) txn)
         _ (info :queries queries)
-        results (a/execute session (h/batch (apply h/queries queries)))]
+        results (a/execute session (h/batch (apply h/queries queries))
+                           (c/write-opts test))]
     (info :batch-results results)
     (assert (= (count queries) (count results))
             (str "Didn't get enough results for txn " txn ": " (pr-str results)))
@@ -73,7 +74,8 @@
                         (h/select (table-for test k)
                                   (h/where [[= :part 0]
                                             [= :id   k]]))
-                        {:consistency :serial})
+                        (merge {:consistency :serial}
+                               (c/read-opts test)))
              first
              :value)]])
 
@@ -87,7 +89,8 @@
                          (h/set-columns {:value [+ [v]]})
                          (h/where [[= :part 0]
                                    [= :id k]])
-                         (h/only-if [[= :lwt_dummy nil]]))))
+                         (h/only-if [[= :lwt_dummy nil]]))
+               (c/write-opts test)))
   txn)
 
 (defn append-only?

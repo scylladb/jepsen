@@ -55,7 +55,8 @@
                                           (update :lwt
                                                   (set-columns {:value new})
                                                   (where [[= :id k]])
-                                                  (only-if [[:value old]])))]
+                                                  (only-if [[:value old]]))
+                                          (c/write-opts test))]
                  (if (-> result first ak)
                    (assoc op :type :ok)
                    (assoc op :type :fail :error (-> result first :value))))
@@ -65,7 +66,8 @@
                                 (update :lwt
                                         (set-columns {:value v})
                                         (only-if [[:in :value (range 5)]])
-                                        (where [[= :id k]])))]
+                                        (where [[= :id k]]))
+                                (c/write-opts test))]
                    (if (-> result first ak)
                      ; Great, we're done
                      (assoc op :type :ok)
@@ -74,7 +76,8 @@
                      (let [result' (alia/execute s (insert :lwt
                                                            (values [[:id k]
                                                                     [:value v]])
-                                                           (if-exists false)))]
+                                                           (if-exists false))
+                                                 (c/write-opts test))]
                        (if (-> result' first ak)
                          (assoc op :type :ok)
                          (assoc op :type :fail)))))
@@ -82,7 +85,8 @@
           :read (let [[k _] (:value op)
                       v     (->> (alia/execute s
                                                (select :lwt (where [[= :id k]]))
-                                               {:consistency :serial})
+                                               (merge {:consistency :serial}
+                                                      (c/read-opts test)))
                                  first
                              :value)]
                   (assoc op :type :ok :value (independent/tuple k v)))))))

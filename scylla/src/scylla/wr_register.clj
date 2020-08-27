@@ -42,8 +42,7 @@
                      txn)
         ; _ (info :queries queries)
         results (a/execute session (h/batch (apply h/queries queries))
-                           {:consistency        :quorum
-                            :serial-consistency :serial})]
+                           (c/write-opts test))]
     ; Batch results make no sense so we... just ignore them. Wooo!)
     txn))
 
@@ -59,9 +58,8 @@
                            (h/select table
                                      (h/where [[= :part 0]
                                                [:in :id ks]]))
-                           {:consistency        :serial
-                            ;:serial-consistency :serial
-                            })
+                           (merge {:consistency :serial}
+                                  (c/read-opts test)))
         values  (into {} (map (juxt :id (comp maybe-long :value)) results))]
     (mapv (fn [[f k v]] [f k (get values k)]) txn)))
 
@@ -76,8 +74,7 @@
                          (h/where [[= :part 0]
                                    [= :id k]])
                          (h/only-if [[= :lwt_dummy nil]]))
-               {:consistency        :quorum
-                :serial-consistency :serial}))
+               (c/write-opts test)))
   txn)
 
 (defn single-read
@@ -88,9 +85,8 @@
                         (h/select (table-for test k)
                                   (h/where [[= :part 0]
                                             [= :id   k]]))
-                        {:consistency         :serial
-                         ; :serial-consistency  :serial
-                         })
+                        (merge {:consistency :serial}
+                               (c/read-opts test)))
              first
              :value
              maybe-long)]])

@@ -57,7 +57,7 @@
                            (:value op))
               query (h/batch (apply h/queries queries))
               _ (info :query (h/->raw query))
-              res (a/execute s query {:tracing? true})]
+              res (a/execute s query (c/write-opts test))]
           (assoc op :type :ok
                  :value {:query  (:value op)
                          :result res})))))

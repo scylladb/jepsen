@@ -12,7 +12,7 @@
             [scylla [client :as c]
                     [db :as db]]))
 
-(defrecord CQLCounterClient [tbl-created? conn writec]
+(defrecord CQLCounterClient [tbl-created? conn]
   client/Client
 
   (open! [this test node]
@@ -38,7 +38,8 @@
                               (with {:compaction {:class (db/compaction-strategy)}})))
             (alia/execute s (update :counters
                                     (set-columns :count [+ 0])
-                                    (where [[= :id 0]]))))))))
+                                    (where [[= :id 0]]))
+                          (c/write-opts test)))))))
 
   (invoke! [_ _ op]
     (let [s (:session conn)]
@@ -49,14 +50,18 @@
                                  (update :counters
                                          (set-columns {:count [+ (:value op)]})
                                          (where [[= :id 0]]))
-                                 {:consistency writec
-                                  :retry-policy (retry/fallthrough-retry-policy)})
+                                 (merge {:consistency   :one
+                                         :retry-policy  (retry/fallthrough-retry-policy)}
+                                        (c/write-opts test)))
                    (assoc op :type :ok))
 
-          :read (let [value (->> (alia/execute s
-                                               (select :counters (where [[= :id 0]]))
-                                               {:consistency :all
-                                                :retry-policy (retry/fallthrough-retry-policy)})
+          :read (let [value (->> (alia/execute
+                                   s
+                                   (select :counters (where [[= :id 0]]))
+                                   ; TODO: do we *really* want ALL ; here?
+                                   (merge {:consistency :all
+                                           :retry-policy (retry/fallthrough-retry-policy)}
+                                          (c/read-opts test)))
                                  first
                                  :count)]
                     (assoc op :type :ok :value value))))))
@@ -69,8 +74,7 @@
 
 (defn cql-counter-client
   "A counter implemented using CQL counters"
-  ([] (->CQLCounterClient (atom false) nil :one))
-  ([writec] (->CQLCounterClient (atom false) nil writec)))
+  ([] (->CQLCounterClient (atom false) nil)))
 
 (defn workload
   "An increment-only counter workload."

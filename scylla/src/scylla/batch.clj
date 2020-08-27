@@ -50,12 +50,14 @@
                                     "INSERT INTO bat (pid, cid, value) VALUES ("
                                     value ", 1, " value ");"
                                     "APPLY BATCH;")
-                               {:consistency :quorum})
+                               (merge {:consistency :quorum}
+                                      (c/write-opts test)))
                  (assoc op :type :ok))
 
           :read (let [results (alia/execute s
-                                            (select :bat
-                                                    {:consistency :all}))
+                                            (select :bat)
+                                            (merge {:consistency :all}
+                                                   (c/read-opts test)))
                       value-a (->> results
                                    (filter (fn [ret] (= (:cid ret) 0)))
                                    (map :value)
