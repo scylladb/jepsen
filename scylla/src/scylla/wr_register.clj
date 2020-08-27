@@ -43,6 +43,7 @@
         ; _ (info :queries queries)
         results (a/execute session (h/batch (apply h/queries queries))
                            (c/write-opts test))]
+    (c/assert-applied results)
     ; Batch results make no sense so we... just ignore them. Wooo!)
     txn))
 
@@ -68,13 +69,14 @@
   the write via a CQL conditional update."
   [test session txn]
   (let [[f k v] (first txn)]
-    (a/execute session
-               (h/update (table-for test k)
-                         (h/set-columns {:value v})
-                         (h/where [[= :part 0]
-                                   [= :id k]])
-                         (h/only-if [[= :lwt_dummy nil]]))
-               (c/write-opts test)))
+    (c/assert-applied
+      (a/execute session
+                 (h/update (table-for test k)
+                           (h/set-columns {:value v})
+                           (h/where [[= :part 0]
+                                     [= :id k]])
+                           (h/only-if [[= :lwt_dummy nil]]))
+                 (c/write-opts test))))
   txn)
 
 (defn single-read

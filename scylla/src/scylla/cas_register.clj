@@ -20,10 +20,6 @@
                                                 ReadTimeoutException
                                                 NoHostAvailableException)))
 
-(def ak (keyword "[applied]")) ;this is the name C* returns, define now because
-                               ;it isn't really a valid keyword from reader's
-                               ;perspective
-
 (defrecord CasRegisterClient [tbl-created? conn]
   client/Client
   (open! [this test node]
@@ -57,9 +53,8 @@
                                                   (where [[= :id k]])
                                                   (only-if [[:value old]]))
                                           (c/write-opts test))]
-                 (if (-> result first ak)
-                   (assoc op :type :ok)
-                   (assoc op :type :fail :error (-> result first :value))))
+                 (c/assert-applied result)
+                 (assoc op :type :ok))
 
           :write (let [[k v] (:value op)
                        result (alia/execute s
@@ -68,19 +63,18 @@
                                         (only-if [[:in :value (range 5)]])
                                         (where [[= :id k]]))
                                 (c/write-opts test))]
-                   (if (-> result first ak)
+                   (if (c/applied? result)
                      ; Great, we're done
                      (assoc op :type :ok)
 
                      ; Didn't exist, back off to insert
-                     (let [result' (alia/execute s (insert :lwt
+                     (let [result2 (alia/execute s (insert :lwt
                                                            (values [[:id k]
                                                                     [:value v]])
                                                            (if-exists false))
                                                  (c/write-opts test))]
-                       (if (-> result' first ak)
-                         (assoc op :type :ok)
-                         (assoc op :type :fail)))))
+                       (c/assert-applied result)
+                       (assoc op :type :ok))))
 
           :read (let [[k _] (:value op)
                       v     (->> (alia/execute s

@@ -26,9 +26,7 @@
 
 (defn mop-query
   "Takes a test and an [f k v] micro-op. Generates a query for this micro-op,
-  suitable for inclusion in a batch transaction. For reads, we perform an
-  update which is guaranted to fail, and take advantage of the update returns
-  the non-matching result."
+  suitable for inclusion in a batch transaction."
   [test [f k v]]
   (case f
     :append (h/update (table-for test k)
@@ -37,34 +35,49 @@
                                 [= :id k]])
                       ; This trivial IF always returns true.
                       (h/only-if [[= :lwt_dummy nil]]))
-    :r (h/update (table-for test k)
-                 (h/set-columns {:lwt_dummy nil
-                                 :value [+ []]})
-                 (h/where [[= :part 0]
-                           [= :id k]])
-                 (h/only-if [[= :lwt_dummy nil]]))))
+    ; Dunno how to read. UPDATE's won't return values that aren't in the IF
+    ; clause, and if we use IF on the `value` column, we need it to somehow
+    ; *always* succeed. If CQL allowed OR (instead of just AND), that'd be
+    ; great. Maybe there's some way to ask... not-equal? `value IS NOT [-1]`
+    ; explodes--I guess you can't express a negative in CQL? You also can't say
+    ; CONTAINS, which rules out having a placeholder element of some kind...
+    ;:r (h/update (table-for test k)
+    ;             (h/set-columns {:lwt_dummy nil})
+    ;             (h/where [[= :part 0]
+    ;                       [= :id k]])
+    ;             (h/only-if [[h/contains :value -1]]))
+    ;
+    ; One option for batch reads might be to do an initial read at, say, quorum
+    ; or one, then to *confirm* that read using a CAS? But of course if the CAS
+    ; *failed*, we'd break blind writes too, and that might be *worse* than not
+    ; reading at all.
+    ))
 
 (defn apply-batch!
-  "Takes a test, a session, and a txn. Performs the txn in a batch, batch,
+  "Takes a test, a session, and a txn. Performs the txn in a batch,
   returning the resulting txn."
   [test session txn]
   (let [queries (map (partial mop-query test) txn)
-        _ (info :queries queries)
-        results (a/execute session (h/batch (apply h/queries queries))
-                           (c/write-opts test))]
-    (info :batch-results results)
-    (assert (= (count queries) (count results))
-            (str "Didn't get enough results for txn " txn ": " (pr-str results)))
-    (mapv (fn [[f k v :as mop] res]
-            (info :res [f k v] (pr-str res))
-            (assert (= k (:id res))
-                    (str "Batch result's :id " (:id res)
-                         " didn't match expected key " k))
-            (case f
-              :r     [f k (:value res)]
-              :append mop))
-          txn
-          results)))
+        ; _ (info :query (h/->raw (h/batch (apply h/queries queries))))
+        results (->> (a/execute session
+                                (h/batch (apply h/queries queries))
+                                (c/write-opts test))
+                     c/assert-applied
+                     ; We get back a collection of rows *out* of order. Also,
+                     ; due to a bug (sigh) we'll sometimes be missing rows. But
+                     ; once that's fixed, we should be able to map based on the
+                     ; `id` columns to their prior states, which we use to read
+                     ; data.
+                     (map (juxt :id identity))
+                     (into {}))]
+    ; (info :results results)
+    (mapv (fn [[f k v :as mop]]
+            (let [res (get results k)]
+              (info :res [f k v] (pr-str res))
+              (case f
+                :r      [f k (:value res)]
+                :append mop)))
+            txn)))
 
 (defn single-read
   "Takes a test, session, and a transaction with a single read mop. performs a
@@ -84,13 +97,14 @@
   the append via a CQL conditional update."
   [test session txn]
   (let [[f k v] (first txn)]
-    (a/execute session
-               (h/update (table-for test k)
-                         (h/set-columns {:value [+ [v]]})
-                         (h/where [[= :part 0]
-                                   [= :id k]])
-                         (h/only-if [[= :lwt_dummy nil]]))
-               (c/write-opts test)))
+    (c/assert-applied
+      (a/execute session
+                 (h/update (table-for test k)
+                           (h/set-columns {:value [+ [v]]})
+                           (h/where [[= :part 0]
+                                     [= :id k]])
+                           (h/only-if [[= :lwt_dummy nil]]))
+                 (c/write-opts test))))
   txn)
 
 (defn append-only?
@@ -160,4 +174,12 @@
   [opts]
   (let [w (append/test opts)]
     (assoc w
-           :client (Client. nil))))
+           :client (Client. nil)
+           :generator (gen/filter (fn [op]
+                                    (let [txn (:value op)]
+                                      ; We can't do SELECT IN due to a
+                                      ; limitation in Scylla CQL. :(
+                                      (or (= 1 (count txn))
+                                          (append-only? txn))))
+                                  (:generator w))
+           )))

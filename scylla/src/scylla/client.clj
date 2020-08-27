@@ -162,6 +162,35 @@
       c  (assoc :consistency c)
       sc (assoc :serial-consistency sc))))
 
+(def applied-kw
+  "This is the special field Scylla uses to indicate a row update was applied."
+  (keyword "[applied]"))
+
+(defn applied?
+  "Takes a collection of rows from alia/execute, and returns true if all rows
+  were applied."
+  [rows]
+  (every? applied-kw rows))
+
+(defn assert-applied
+  "Takes a collection of rows from (alia/execute) and asserts that all of them
+  have `[applied] true`; if not, throws. Returns rows."
+  [rows]
+  (cond (applied? rows)
+        rows
+
+        (some applied-kw rows)
+        (throw+ {:type      :partially-applied
+                 :message   "Some changes, but not others, were applied!"
+                 :definite? false
+                 :rows      rows})
+
+        true
+        (throw+ {:type      :not-applied
+                 :message   "No  changes were applied."
+                 :definite? true
+                 :rows      rows})))
+
 (defmacro remap-errors-helper
   "Basic error remapping. See remap-errors."
   [& body]
