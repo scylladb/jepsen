@@ -58,9 +58,11 @@
               _ (info :query (h/->raw query))
               res (a/execute s query (c/write-opts test))
               ; Rename [applied] so we don't generate illegal EDN
-              res (-> res
-                      (assoc :applied (c/applied-kw res))
-                      (dissoc c/applied-kw))]
+              res (map (fn [row]
+                         (-> row
+                             (assoc :applied (c/applied-kw row))
+                             (dissoc c/applied-kw)))
+                       res)]
           (assoc op :type :ok
                  :value {:query  (:value op)
                          :result res})))))
