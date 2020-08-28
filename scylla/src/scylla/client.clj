@@ -7,6 +7,7 @@
             [clojure.tools.logging :refer [info warn]]
             [slingshot.slingshot :refer [try+ throw+]])
   (:import (com.datastax.driver.core.exceptions NoHostAvailableException
+                                                ReadFailureException
                                                 ReadTimeoutException
                                                 TransportException
                                                 UnavailableException
@@ -196,29 +197,33 @@
   [& body]
   `(try+ ~@body
          (catch NoHostAvailableException e#
-           (throw+ {:type      :no-host-available
-                    :message   (.getMessage e#)
-                    :definite? true}))
+           (throw+ {:type       :no-host-available
+                    :message    (.getMessage e#)
+                    :definite?  true}))
+         (catch ReadFailureException e#
+           (throw+ {:type       :read-failure
+                    :message    (.getMessage e#)
+                    :definite?  true}))
          (catch ReadTimeoutException e#
-           (throw+ {:type      :read-timeout
-                    :message   (.getMessage e#)
-                    :definite? false}))
+           (throw+ {:type       :read-timeout
+                    :message    (.getMessage e#)
+                    :definite?  false}))
          (catch TransportException e#
-           (throw+ {:type      :transport
-                    :message   (.getMessage e#)
-                    :definite? false}))
+           (throw+ {:type       :transport
+                    :message    (.getMessage e#)
+                    :definite?  false}))
          (catch UnavailableException e#
-           (throw+ {:type      :unavailable
-                    :message   (.getMessage e#)
-                    :definite? true}))
+           (throw+ {:type       :unavailable
+                    :message    (.getMessage e#)
+                    :definite?  true}))
          (catch WriteFailureException e#
-           (throw+ {:type      :write-failure
-                    :message   (.getMessage e#)
-                    :definite? false}))
+           (throw+ {:type       :write-failure
+                    :message    (.getMessage e#)
+                    :definite?  false}))
          (catch WriteTimeoutException e#
-           (throw+ {:type      :write-timeout
-                    :message   (.getMessage e#)
-                    :definite? false}))))
+           (throw+ {:type       :write-timeout
+                    :message    (.getMessage e#)
+                    :definite?  false}))))
 
 (defmacro remap-errors
   "Evaluates body, catching known client errors and remapping them to Slingshot
