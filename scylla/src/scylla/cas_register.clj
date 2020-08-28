@@ -67,13 +67,13 @@
                      (assoc op :type :ok)
 
                      ; Didn't exist, back off to insert
-                     (let [result2 (alia/execute s (insert :lwt
-                                                           (values [[:id k]
-                                                                    [:value v]])
-                                                           (if-exists false))
-                                                 (c/write-opts test))]
-                       (c/assert-applied result)
-                       (assoc op :type :ok))))
+                     (do (c/assert-applied
+                           (alia/execute s (insert :lwt
+                                                   (values [[:id k]
+                                                            [:value v]])
+                                                   (if-exists false))
+                                         (c/write-opts test)))
+                         (assoc op :type :ok))))
 
           :read (let [[k _] (:value op)
                       v     (->> (alia/execute s
