@@ -202,8 +202,10 @@
         (cu/grepkill! "scylla-jmx")
         (cu/grepkill! "scylla")
         (try+ (c/exec :service :scylla-server :stop)
+              (catch [:exit 1] e
+                ; Also not installed yet?
               (catch [:exit 5] e
-                ; Not installed yet
+                ; Not installed yet?
                 )))
       (info node "has stopped ScyllaDB"))
 
