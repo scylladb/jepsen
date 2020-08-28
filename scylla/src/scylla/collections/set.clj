@@ -82,5 +82,8 @@
   {:client          (cql-set-client)
    :generator       (->> (range)
                          (map (fn [x] {:f :add, :value x})))
-   :final-generator {:f :read}
+   :final-generator (->> {:f :read}
+                         gen/repeat
+                         (gen/stagger 1)
+                         gen/until-ok)
    :checker         (checker/set)})
