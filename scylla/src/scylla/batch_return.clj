@@ -113,13 +113,14 @@
              :query     query
              :result    result})
 
-      (not= (distinct (map :key query))
-            (distinct (map :key result)))
-      (conj {:type      :out-of-order
-             :expected  (distinct (map :key query))
-             :received  (distinct (map :key result))
-             :query     query
-             :result    result})
+      ; Sigh, this is apparently expected behavior
+      ;(not= (distinct (map :key query))
+      ;      (distinct (map :key result)))
+      ;(conj {:type      :out-of-order
+      ;       :expected  (distinct (map :key query))
+      ;       :received  (distinct (map :key result))
+      ;       :query     query
+      ;       :result    result})
 
       (or (some nil? (map :part result))
           (some nil? (map :key result)))
@@ -140,7 +141,10 @@
                            (map :type)
                            frequencies
                            (map-vals #(float (/ % (count ok)))))]
-        {:valid?      (not (seq errs))
+        ; Apparently batches are *supposed* to return out-of-order rows and nil
+        ; keys. They're still broken in another way: failing to return some
+        ; keys at all.
+        {:valid?      (not (:different-keys err-freqs))
          :errors      errs
          :frequencies err-freqs}))))
 
