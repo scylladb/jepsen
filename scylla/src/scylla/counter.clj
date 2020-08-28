@@ -69,7 +69,10 @@
   (close! [_ _]
     (c/close! conn))
 
-  (teardown! [_ _]))
+  (teardown! [_ _])
+
+  client/Reusable
+  (reusable? [_ _] true))
 
 (defn cql-counter-client
   "A counter implemented using CQL counters"

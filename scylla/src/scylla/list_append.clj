@@ -166,7 +166,11 @@
   (close! [this test]
     (c/close! conn))
 
-  (teardown! [this test]))
+  (teardown! [this test])
+
+  client/Reusable
+  (reusable? [_ _] true))
+
 
 (defn workload
   "See options for jepsen.tests.append/test"

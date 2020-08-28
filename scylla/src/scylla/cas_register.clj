@@ -87,7 +87,11 @@
   (close! [_ _]
           (c/close! conn))
 
-  (teardown! [_ _]))
+  (teardown! [_ _])
+
+  client/Reusable
+  (reusable? [_ _] true))
+
 
 (defn cas-register-client
   "A CAS register implemented using LWT"

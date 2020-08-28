@@ -73,7 +73,10 @@
   (close! [_ _]
           (c/close! conn))
 
-  (teardown! [_ _]))
+  (teardown! [_ _])
+
+  client/Reusable
+  (reusable? [_ _] true))
 
 (defn mv-map-client
   "A map implemented using MV"

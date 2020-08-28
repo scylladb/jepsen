@@ -76,7 +76,10 @@
   (close! [_ _]
     (c/close! conn))
 
-  (teardown! [_ _]))
+  (teardown! [_ _])
+
+  client/Reusable
+  (reusable? [_ _] true))
 
 (defn batch-set-client
   "A set implemented using batched inserts"

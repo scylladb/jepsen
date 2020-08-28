@@ -70,7 +70,11 @@
   (close! [this test]
     (c/close! conn))
 
-  (teardown! [this test]))
+  (teardown! [this test])
+
+  client/Reusable
+  (reusable? [_ _] true))
+
 
 (defn rand-update
   "Returns a random [column-key, val] update which could be applied to a single
