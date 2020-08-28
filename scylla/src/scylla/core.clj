@@ -177,7 +177,13 @@
 
 (def cli-opts
   "Options for test runners."
-  [[nil "--key-count INT" "For the append test, how many keys should we test at once?"
+  [[nil "--compaction-strategy CLASS" "What compaction strategy should we use for tables?"
+    :default "SizeTieredCompactionStrategy"]
+
+   [nil "--[no-]hinted-handoff" "Enable or disable hinted handoff."
+    :default true]
+
+   [nil "--key-count INT" "For the append test, how many keys should we test at once?"
     :parse-fn parse-long
     :validate [pos? "must be positive"]]
 
@@ -202,6 +208,9 @@
 
    [nil "--[no-]noisy-timestamps" "If set, randomly fuzz timestamps to simulate behavior in a cluster without perfect clocks."
     :default  true]
+
+   [nil "--phi-level LEVEL" "What value should we use for the phi-accrual failure detector? Higher numbers slow down transitions during partitions."
+    :default 2]
 
    ["-r" "--rate HZ" "Approximate number of requests per second per thread"
     :default 10

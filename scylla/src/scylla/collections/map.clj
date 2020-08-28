@@ -37,7 +37,7 @@
                                           (column-definitions {:id    :int
                                                                :elements    (map-type :int :int)
                                                                :primary-key [:id]})
-                                          (with {:compaction {:class (db/compaction-strategy)}}))))))))
+                                          (with {:compaction {:class (:compaction-strategy test)}}))))))))
 
   (invoke! [_ test op]
     (let [s (:session conn)]

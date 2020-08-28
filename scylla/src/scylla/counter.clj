@@ -9,8 +9,7 @@
             [qbits.alia :as alia]
             [qbits.alia.policy.retry :as retry]
             [qbits.hayt :refer :all]
-            [scylla [client :as c]
-                    [db :as db]]))
+            [scylla [client :as c]]))
 
 (defrecord CQLCounterClient [tbl-created? conn]
   client/Client
@@ -35,7 +34,7 @@
                               (column-definitions {:id    :int
                                                    :count    :counter
                                                    :primary-key [:id]})
-                              (with {:compaction {:class (db/compaction-strategy)}})))
+                              (with {:compaction {:class (:compaction-strategy test)}})))
             (alia/execute s (update :counters
                                     (set-columns :count [+ 0])
                                     (where [[= :id 0]]))

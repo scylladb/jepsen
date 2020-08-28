@@ -12,8 +12,7 @@
             [knossos.model :as model]
             [qbits.alia :as alia]
             [qbits.hayt :refer :all]
-            [scylla [client :as c]
-                    [db :as db]])
+            [scylla [client :as c]])
   (:import (clojure.lang ExceptionInfo)
            (com.datastax.driver.core.exceptions UnavailableException
                                                 WriteTimeoutException
@@ -39,7 +38,7 @@
                                               (column-definitions {:id    :int
                                                                    :value :int
                                                                    :primary-key [:id]})
-                                              (with {:compaction {:class (db/compaction-strategy)}})))))))
+                                              (with {:compaction {:class (:compaction-strategy test)}})))))))
 
   (invoke! [_ _ op]
     (let [s (:session conn)]

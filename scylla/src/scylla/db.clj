@@ -26,34 +26,6 @@
                                               RetryPolicy$RetryDecision)
            (java.net InetAddress)))
 
-(defn compaction-strategy
-  "Returns the compaction strategy to use"
-  []
-  (or (System/getenv "JEPSEN_COMPACTION_STRATEGY")
-      "SizeTieredCompactionStrategy"))
-
-(defn compressed-commitlog?
-  "Returns whether to use commitlog compression"
-  []
-  (= (some-> (System/getenv "JEPSEN_COMMITLOG_COMPRESSION") (str/lower-case))
-     "false"))
-
-(defn coordinator-batchlog-disabled?
-  "Returns whether to disable the coordinator batchlog for MV"
-  []
-  (boolean (System/getenv "JEPSEN_DISABLE_COORDINATOR_BATCHLOG")))
-
-(defn phi-level
-  "Returns the value to use for phi in the failure detector"
-  []
-  (or (System/getenv "JEPSEN_PHI_VALUE")
-      2))
-
-(defn disable-hints?
-  "Returns true if Jepsen tests should run without hints"
-  []
-  (System/getenv "JEPSEN_DISABLE_HINTS"))
-
 (defn wait-for-recovery
   "Waits for the driver to report all nodes are up"
   [timeout-secs conn]
@@ -165,8 +137,8 @@
                 (str/replace "$SEEDS"           (seeds test))
                 (str/replace "$LISTEN_ADDRESS"  (dns-resolve node))
                 (str/replace "$RPC_ADDRESS"     (dns-resolve node))
-                (str/replace "$HINTED_HANDOFF"  (str (not (disable-hints?))))
-                (str/replace "$PHI_LEVEL"       (str (phi-level))))
+                (str/replace "$HINTED_HANDOFF"  (str (boolean (:hinted-handoff test))))
+                (str/replace "$PHI_LEVEL"       (str (:phi-level test))))
             :> "/etc/scylla/scylla.yaml")))
 
 (defn guarded-start!

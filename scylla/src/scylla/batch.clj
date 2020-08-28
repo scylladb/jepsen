@@ -6,8 +6,7 @@
              [checker   :as checker]
              [generator :as gen]
              [nemesis   :as nemesis]]
-            [scylla [client :as c]
-                    [db :as db]]
+            [scylla [client :as c]]
             [qbits.alia :as alia]
             [qbits.hayt :refer :all]))
 
@@ -35,7 +34,7 @@
                                                    :cid    :int
                                                    :value  :int
                                                    :primary-key [:pid :cid]})
-                              (with {:compaction {:class (db/compaction-strategy)}}))))))))
+                              (with {:compaction {:class (:compaction-strategy test)}}))))))))
 
   (invoke! [this test op]
     (let [s (:session conn)]

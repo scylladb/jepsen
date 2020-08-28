@@ -35,7 +35,7 @@
                               (column-definitions {:id    :int
                                                    :elements    (set-type :int)
                                                    :primary-key [:id]})
-                              (with {:compaction {:class (db/compaction-strategy)}})))
+                              (with {:compaction {:class (:compaction-strategy test)}})))
             )))))
 
   (invoke! [_ test op]

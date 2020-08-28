@@ -8,8 +8,7 @@
                     [generator :as gen]
                     [util :as util]]
             [jepsen.tests.cycle.wr :as wr]
-            [scylla [client :as c]
-                    [db :as db]]
+            [scylla [client :as c]]
             [qbits [alia :as a]
                    [hayt :as h]]))
 
@@ -142,7 +141,7 @@
                                                 :lwt_dummy    :int
                                                 :value        :int
                                                 :primary-key  [:part :id]})
-                         (h/with {:compaction {:class (db/compaction-strategy)}})))))))
+                         (h/with {:compaction {:class (:compaction-strategy test)}})))))))
 
   (invoke! [this test op]
     (let [s (:session conn)]

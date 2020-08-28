@@ -10,8 +10,7 @@
             [qbits.alia.policy.retry :as retry]
             [qbits.hayt :refer :all]
             [scylla [checker  :as checker]
-                    [client   :as c]
-                    [db       :as db]])
+                    [client   :as c]])
   (:import (clojure.lang ExceptionInfo)
            (java.net InetSocketAddress)))
 
@@ -38,14 +37,14 @@
                               (column-definitions {:key    :int
                                                    :value    :int
                                                    :primary-key [:key]})
-                              (with {:compaction {:class (db/compaction-strategy)}})))
+                              (with {:compaction {:class (:compaction-strategy test)}})))
             (try (alia/execute
                    c (str "CREATE MATERIALIZED VIEW mvmap AS SELECT"
                           " * FROM map WHERE value IS NOT NULL"
                           " AND key IS NOT NULL "
                           "PRIMARY KEY (value, key)"
                           "WITH compaction = "
-                          "{'class' : '" (db/compaction-strategy)
+                          "{'class' : '" (:compaction-strategy test)
                           "'};"))
                  (catch com.datastax.driver.core.exceptions.AlreadyExistsException e)))))))
 
