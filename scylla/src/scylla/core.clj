@@ -169,8 +169,6 @@
             :generator    generator
             :pure-generators true})))
 
-(prn qbits.alia.enum/consistency-level)
-
 (def consistency-levels
   "A set of keyword consistency levels the C* driver supports."
   (set (keys (qbits.commons.enum/enum->map ConsistencyLevel))))
@@ -202,7 +200,7 @@
                     (cli/one-of special-nemeses))]]
 
    [nil "--nemesis-interval SECONDS" "How long to wait between nemesis faults."
-    :default  3
+    :default  10
     :parse-fn read-string
     :validate [#(and (number? %) (pos? %)) "must be a positive number"]]
 
@@ -234,7 +232,7 @@
     :validate [consistency-levels (cli/one-of consistency-levels)]]
 
    [nil "--write-serial-consistency LEVEL"
-    "What consistency level should we set for writes?"
+    "What *serial* consistency level should we set for writes?"
     :parse-fn keyword
     :validate [consistency-levels (cli/one-of consistency-levels)]]])
 
