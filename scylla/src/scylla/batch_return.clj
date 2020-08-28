@@ -56,7 +56,11 @@
                            (:value op))
               query (h/batch (apply h/queries queries))
               _ (info :query (h/->raw query))
-              res (a/execute s query (c/write-opts test))]
+              res (a/execute s query (c/write-opts test))
+              ; Rename [applied] so we don't generate illegal EDN
+              res (-> res
+                      (assoc :applied (c/applied-kw res))
+                      (dissoc c/applied-kw))]
           (assoc op :type :ok
                  :value {:query  (:value op)
                          :result res})))))
