@@ -98,11 +98,8 @@
   [test node]
   (dt/with-retry [tries 60]
     (let [c (open test node)]
-      (info :session (:session c))
-      (info :desc-cluster
-            (alia/execute (:session c)
-                          (hayt/->raw (hayt/select :system.peers))))
-
+      (alia/execute (:session c)
+                    (hayt/->raw (hayt/select :system.peers)))
       c)
     (catch NoHostAvailableException e
       (when (zero? tries)
