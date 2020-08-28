@@ -53,14 +53,15 @@
                  (assoc op :type :ok))
 
           :read (do (db/wait-for-recovery 30 s)
-                    (let [value (->> (alia/execute s
-                                                   (select :sets
-                                                           (where [[= :id 0]]))
-                                                   ; TODO: is ALL really what
-                                                   ; we want?
-                                                   (merge {:consistency :all
-                                                           :retry-policy c/aggressive-read})
-                                                   (c/read-opts test))
+                    (let [value (->> (alia/execute
+                                       s
+                                       (select :sets
+                                               (where [[= :id 0]]))
+                                       ; TODO: is ALL really what
+                                       ; we want?
+                                       (merge {:consistency :all
+                                               :retry-policy c/aggressive-read}
+                                              (c/read-opts test)))
                                      first
                                      :elements
                                      (into (sorted-set)))]
