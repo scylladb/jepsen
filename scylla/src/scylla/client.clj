@@ -7,6 +7,7 @@
             [clojure.tools.logging :refer [info warn]]
             [slingshot.slingshot :refer [try+ throw+]])
   (:import (com.datastax.driver.core.exceptions NoHostAvailableException
+                                                OperationTimedOutException
                                                 ReadFailureException
                                                 ReadTimeoutException
                                                 TransportException
@@ -200,6 +201,10 @@
            (throw+ {:type       :no-host-available
                     :message    (.getMessage e#)
                     :definite?  true}))
+         (catch OperationTimedOutException e#
+           (throw+ {:type       :operation-timeout
+                    :message    (.getMessage e#)
+                    :definite?  false}))
          (catch ReadFailureException e#
            (throw+ {:type       :read-failure
                     :message    (.getMessage e#)
