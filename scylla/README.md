@@ -30,17 +30,7 @@ If you're running in containers, your host system will need a higher limit for a
 
 A Docker container preconfigured to run Jepsen tests is available at `tjake/jepsen` on [Docker Hub](https://hub.docker.com/r/tjake/jepsen). Since it runs Docker inside Docker, it must be run with the privileged flag. A command like `docker run -it --privileged -v /home/jkni/git:/jkni-git tjake/jepsen` will start the container and attach to it as an interactive shell. Since you'll likely be running a newer version of Jepsen/C* tests than those available in the image, you'll want to share the directory containing your local Jepsen/C* clone with the container as in the example above.
 
-## Environment Setup (within Docker container)
-
-Some setup is necessary once you are within the Docker container. These steps may be eliminated as C* versions move forward and artifacts become available in central repository.
-
-Testing 3.0 and above requires a shaded driver from the C* source tree.
-
-The shaded driver available with C* should be installed to your local maven repository as an artifact with coordinates [com.datastax.cassandra/cassandra-driver-core "trunk-SHADED"].
-
-Then, a patched version of Cassaforte from the `trunk` branch at [GitHub](https://github.com/jkni/cassaforte/tree/trunk) should be `lein install`ed. This can be done by cloning the repository
-
-Lastly, a patched version of clj-ssh must be installed. This is available at [GitHub](https://github.com/jkni/clj-ssh/tree/trunk) and should be `lein install`ed. (aphyr: I think this is no longer necessary; the patch from this branch is in mainline clj-ssh as well)
+## Environment Setup (on DB nodes, or the host, for containers).
 
 You may need to up aio-max-nr.
 
