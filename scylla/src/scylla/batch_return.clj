@@ -35,9 +35,9 @@
                                               :key          :int
                                               ; We can't do LWT without SOME
                                               ; kind of IF statement (why?),
-                                              ; so we leave a dummy null
+                                              ; so we leave a trivial null
                                               ; column here.
-                                              :lwt_dummy    :int
+                                              :lwt_trivial    :int
                                               :int1         :int
                                               :int2         :int
                                               :primary-key  [:part :key]})
@@ -52,7 +52,7 @@
                                          (h/set-columns updates)
                                          (h/where [[= :part 0]
                                                    [= :key key]])
-                                         (h/only-if [[= :lwt_dummy nil]])))
+                                         (h/only-if [[= :lwt_trivial nil]])))
                            (:value op))
               query (h/batch (apply h/queries queries))
               _ (info :query (h/->raw query))

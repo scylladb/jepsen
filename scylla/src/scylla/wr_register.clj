@@ -37,7 +37,7 @@
                                  (h/where [[= :part 0]
                                            [= :id k]])
                                  ; This trivial IF always returns true.
-                                 (h/only-if [[= :lwt_dummy nil]])))
+                                 (h/only-if [[= :lwt_trivial nil]])))
                      txn)
         ; _ (info :queries queries)
         results (a/execute session (h/batch (apply h/queries queries))
@@ -74,7 +74,7 @@
                            (h/set-columns {:value v})
                            (h/where [[= :part 0]
                                      [= :id k]])
-                           (h/only-if [[= :lwt_dummy nil]]))
+                           (h/only-if [[= :lwt_trivial nil]]))
                  (c/write-opts test))))
   txn)
 
@@ -136,9 +136,9 @@
                                                 :id           :int
                                                 ; We can't do LWT without SOME
                                                 ; kind of IF statement (why?),
-                                                ; so we leave a dummy null
+                                                ; so we leave a trivial null
                                                 ; column here.
-                                                :lwt_dummy    :int
+                                                :lwt_trivial    :int
                                                 :value        :int
                                                 :primary-key  [:part :id]})
                          (h/with {:compaction {:class (:compaction-strategy test)}})))))))

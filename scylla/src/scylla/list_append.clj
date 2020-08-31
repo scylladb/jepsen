@@ -33,7 +33,7 @@
                       (h/where [[= :part 0]
                                 [= :id k]])
                       ; This trivial IF always returns true.
-                      (h/only-if [[= :lwt_dummy nil]]))
+                      (h/only-if [[= :lwt_trivial nil]]))
     ; Dunno how to read. UPDATE's won't return values that aren't in the IF
     ; clause, and if we use IF on the `value` column, we need it to somehow
     ; *always* succeed. If CQL allowed OR (instead of just AND), that'd be
@@ -41,7 +41,7 @@
     ; explodes--I guess you can't express a negative in CQL? You also can't say
     ; CONTAINS, which rules out having a placeholder element of some kind...
     ;:r (h/update (table-for test k)
-    ;             (h/set-columns {:lwt_dummy nil})
+    ;             (h/set-columns {:lwt_trivial nil})
     ;             (h/where [[= :part 0]
     ;                       [= :id k]])
     ;             (h/only-if [[h/contains :value -1]]))
@@ -102,7 +102,7 @@
                            (h/set-columns {:value [+ [v]]})
                            (h/where [[= :part 0]
                                      [= :id k]])
-                           (h/only-if [[= :lwt_dummy nil]]))
+                           (h/only-if [[= :lwt_trivial nil]]))
                  (c/write-opts test))))
   txn)
 
@@ -148,9 +148,9 @@
                                                 :id           :int
                                                 ; We can't do LWT without SOME
                                                 ; kind of IF statement (why?),
-                                                ; so we leave a dummy null
+                                                ; so we leave a trivial null
                                                 ; column here.
-                                                :lwt_dummy    :int
+                                                :lwt_trivial    :int
                                                 :value        (h/list-type :int)
                                                 :primary-key  [:part :id]})
                          (h/with {:compaction {:class (:compaction-strategy test)}})))))))
