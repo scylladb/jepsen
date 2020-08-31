@@ -155,61 +155,61 @@
 (defn db
   "Sets up and tears down ScyllaDB"
   [version]
-  (let [tcpdump (db/tcpdump {:ports [9042]
-                             :filter "host 192.168.122.1"})]
-  (reify db/DB
-    (setup! [db test node]
-      (db/setup! tcpdump test node)
-      (doto node
-        (install! version)
-        (configure! test))
-      (let [t1 (util/linear-time-nanos)]
-        (guarded-start! node test db)
-        (sc/close! (sc/await-open test node))
-        (info "Scylla startup complete in"
-              (float (util/nanos->secs (- (util/linear-time-nanos) t1)))
-              "seconds")))
+  (let [tcpdump (db/tcpdump {:ports         [9042]
+                             :clients-only? true})]
+    (reify db/DB
+      (setup! [db test node]
+        (db/setup! tcpdump test node)
+        (doto node
+          (install! version)
+          (configure! test))
+        (let [t1 (util/linear-time-nanos)]
+          (guarded-start! node test db)
+          (sc/close! (sc/await-open test node))
+          (info "Scylla startup complete in"
+                (float (util/nanos->secs (- (util/linear-time-nanos) t1)))
+                "seconds")))
 
-    (teardown! [db test node]
-      (db/kill! db test node)
-      (c/su
-        (info "deleting data files")
-        (meh (c/exec :rm :-rf
-                     ; We leave directories in place; Scylla gets confused
-                     ; without them.
-                     (lit "/var/lib/scylla/data/*")
-                     (lit "/var/lib/scylla/commitlog/*")
-                     (lit "/var/lib/scylla/hints/*")
-                     (lit "/var/lib/scylla/view_hints/*")
-                     "/var/log/scylla/scylla.log")))
-      (db/teardown! tcpdump test node))
+      (teardown! [db test node]
+        (db/kill! db test node)
+        (c/su
+          (info "deleting data files")
+          (meh (c/exec :rm :-rf
+                       ; We leave directories in place; Scylla gets confused
+                       ; without them.
+                       (lit "/var/lib/scylla/data/*")
+                       (lit "/var/lib/scylla/commitlog/*")
+                       (lit "/var/lib/scylla/hints/*")
+                       (lit "/var/lib/scylla/view_hints/*")
+                       "/var/log/scylla/scylla.log")))
+        (db/teardown! tcpdump test node))
 
-    db/LogFiles
-    (log-files [db test node]
-      (concat (db/log-files tcpdump test node)
-              ["/var/log/scylla/scylla.log"]))
+      db/LogFiles
+      (log-files [db test node]
+        (concat (db/log-files tcpdump test node)
+                ["/var/log/scylla/scylla.log"]))
 
-    db/Process
-    (start! [_ test node]
-      (info "starting ScyllaDB")
-      (c/su
-        (c/exec :service :scylla-server :start)
-        (info "started ScyllaDB")))
+      db/Process
+      (start! [_ test node]
+        (info "starting ScyllaDB")
+        (c/su
+          (c/exec :service :scylla-server :start)
+          (info "started ScyllaDB")))
 
-    (kill! [_ test node]
-      (info node "stopping ScyllaDB")
-      (c/su
-        (cu/grepkill! "scylla-jmx")
-        (cu/grepkill! "scylla")
-        (try+ (c/exec :service :scylla-server :stop)
-              ; Not installed yet?
-              (catch [:exit 1] e)
-              (catch [:exit 5] e)))
-      (info node "has stopped ScyllaDB"))
+      (kill! [_ test node]
+        (info node "stopping ScyllaDB")
+        (c/su
+          (cu/grepkill! "scylla-jmx")
+          (cu/grepkill! "scylla")
+          (try+ (c/exec :service :scylla-server :stop)
+                ; Not installed yet?
+                (catch [:exit 1] e)
+                (catch [:exit 5] e)))
+        (info node "has stopped ScyllaDB"))
 
-    db/Pause
-    (pause! [_ test node]
-      (c/su (cu/grepkill! :stop "/usr/bin/scylla")))
+      db/Pause
+      (pause! [_ test node]
+        (c/su (cu/grepkill! :stop "/usr/bin/scylla")))
 
-    (resume! [_ test node]
-      (c/su (cu/grepkill! :cont :scylla))))))
+      (resume! [_ test node]
+        (c/su (cu/grepkill! :cont :scylla))))))
