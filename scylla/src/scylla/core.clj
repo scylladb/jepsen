@@ -185,6 +185,9 @@
     :parse-fn parse-long
     :validate [pos? "must be positive"]]
 
+   [nil "--[no-]lwt" "Enables or disables LWT for some workloads."
+    :default true]
+
    [nil "--max-txn-length INT" "What's the most operations we can execute per transaction?"
     :parse-fn parse-long
     :validate [pos? "must be positive"]]

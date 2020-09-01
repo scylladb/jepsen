@@ -32,12 +32,13 @@
   batch, returning the resulting txn."
   [test session txn]
   (let [queries (map (fn [[f k v]]
-                       (h/update (table-for test k)
-                                 (h/set-columns {:value v})
-                                 (h/where [[= :part 0]
-                                           [= :id k]])
-                                 ; This trivial IF always returns true.
-                                 (h/only-if [[= :lwt_trivial nil]])))
+                       (merge (h/update (table-for test k)
+                                        (h/set-columns {:value v})
+                                        (h/where [[= :part 0]
+                                                  [= :id k]]))
+                              (when (:lwt test)
+                                ; This trivial IF always returns true.
+                                (h/only-if [[= :lwt_trivial nil]]))))
                      txn)
         ; _ (info :queries queries)
         results (a/execute session (h/batch (apply h/queries queries))
@@ -70,11 +71,12 @@
   (let [[f k v] (first txn)]
     (c/assert-applied
       (a/execute session
-                 (h/update (table-for test k)
-                           (h/set-columns {:value v})
-                           (h/where [[= :part 0]
-                                     [= :id k]])
-                           (h/only-if [[= :lwt_trivial nil]]))
+                 (merge (h/update (table-for test k)
+                                  (h/set-columns {:value v})
+                                  (h/where [[= :part 0]
+                                            [= :id k]]))
+                        (when (:lwt test)
+                          (h/only-if [[= :lwt_trivial nil]])))
                  (c/write-opts test))))
   txn)
 
@@ -168,5 +170,41 @@
                               (or (read-only? txn)
                                   (write-only? txn))))
                           (wr/gen opts))
-   :checker   (wr/checker (merge {:linearizable-keys? true}
-                                 opts))})
+   :checker   (wr/checker
+                (merge
+                  (if (and (:lwt opts)
+                           (= :serial (:read-consistency opts :serial)))
+                    ; If all updates use LWT and all reads use SERIAL, we
+                    ; expect strict-1SR.
+                    {:linearizable-keys? true
+                     :consistency-models [:strict-serializable]}
+
+                    ; Otherwise, Scylla docs claim UPDATE and BATCH are
+                    ; "performed in isolation" on single partitions; we
+                    ; should observe serializability--but we can't rely on
+                    ; sequential or linearizable key constraints.
+                    {:consistency-models [:serializable]})
+                  opts))})
+
+; Patch a bug in Elle real quick--I've got it all torn open and don't want to
+; bump versions right now.
+(ns elle.rw-register)
+
+(defn cyclic-version-cases
+  "Given a map of version graphs, returns a sequence (or nil) of cycles in that
+  graph."
+  [version-graphs]
+  (seq
+    (reduce (fn [cases [k version-graph]]
+              (let [sccs (g/strongly-connected-components version-graph)]
+                (->> sccs
+                     (sort-by (partial reduce (fn option-compare [a b]
+                                                (cond (nil? a) b
+                                                      (nil? b) a
+                                                      true     (min a b)))))
+                     (map (fn [scc]
+                            {:key k
+                             :scc scc}))
+                     (into cases))))
+            []
+            version-graphs)))

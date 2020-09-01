@@ -14,6 +14,16 @@
             [qbits [alia :as a]
                    [hayt :as h]]))
 
+(def table-count
+  "How many tables should we spread updates across? We can only do conditional
+  updates across one table, sadly; maybe we can raise this later."
+  1)
+
+(defn all-tables
+  "A vector of all tables in this test."
+  []
+  (mapv (partial str "batch_") (range table-count)))
+
 (defrecord Client [conn]
   client/Client
   (open! [this test node]
@@ -28,31 +38,32 @@
                        (h/with {:replication {:class :SimpleStrategy
                                               :replication_factor 3}})))
         (a/execute s (h/use-keyspace :jepsen_keyspace))
-        (a/execute s (h/create-table
-                       :batch_ret
-                       (h/if-exists false)
-                       (h/column-definitions {:part         :int
-                                              :key          :int
-                                              ; We can't do LWT without SOME
-                                              ; kind of IF statement (why?),
-                                              ; so we leave a trivial null
-                                              ; column here.
-                                              :lwt_trivial    :int
-                                              :int1         :int
-                                              :int2         :int
-                                              :primary-key  [:part :key]})
-                       (h/with {:compaction {:class (:compaction-strategy test)}}))))))
+        (doseq [table (all-tables)]
+          (a/execute s (h/create-table
+                         table
+                         (h/if-exists false)
+                         (h/column-definitions {:part         :int
+                                                :key          :int
+                                                ; We can't do LWT without SOME
+                                                ; kind of IF statement (why?),
+                                                ; so we leave a trivial null
+                                                ; column here.
+                                                :lwt_trivial  :int
+                                                :int1         :int
+                                                :int2         :int
+                                                :primary-key  [:part :key]})
+                         (h/with {:compaction {:class (:compaction-strategy test)}})))))))
 
   (invoke! [this test op]
     (let [s (:session conn)]
       (c/with-errors op #{}
         (a/execute s (h/use-keyspace :jepsen_keyspace))
-        (let [queries (map (fn update-query [{:keys [key updates]}]
-                             (h/update :batch_ret
-                                         (h/set-columns updates)
-                                         (h/where [[= :part 0]
-                                                   [= :key key]])
-                                         (h/only-if [[= :lwt_trivial nil]])))
+        (let [queries (map (fn update-query [{:keys [table key updates]}]
+                             (h/update table
+                                       (h/set-columns updates)
+                                       (h/where [[= :part 0]
+                                                 [= :key key]])
+                                       (h/only-if [[= :lwt_trivial nil]])))
                            (:value op))
               query (h/batch (apply h/queries queries))
               _ (info :query (h/->raw query))
@@ -92,7 +103,8 @@
    :value (->> (repeatedly (partial rand-int 10))
                (take (rand-int 5))
                (map (fn key-updates [k]
-                      {:key     k
+                      {:table   (rand-nth (all-tables))
+                       :key     k
                        :updates (->> (repeatedly rand-update)
                                      ; We can't generate empty SET clauses
                                      (take (inc (rand-int 5)))

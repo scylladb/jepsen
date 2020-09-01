@@ -28,12 +28,13 @@
   suitable for inclusion in a batch transaction."
   [test [f k v]]
   (case f
-    :append (h/update (table-for test k)
+    :append (merge (h/update (table-for test k)
                       (h/set-columns {:value [+ [v]]})
                       (h/where [[= :part 0]
-                                [= :id k]])
-                      ; This trivial IF always returns true.
-                      (h/only-if [[= :lwt_trivial nil]]))
+                                [= :id k]]))
+                   (when (:lwt test)
+                     ; This trivial IF always returns true.
+                     (h/only-if [[= :lwt_trivial nil]])))
     ; Dunno how to read. UPDATE's won't return values that aren't in the IF
     ; clause, and if we use IF on the `value` column, we need it to somehow
     ; *always* succeed. If CQL allowed OR (instead of just AND), that'd be
@@ -98,11 +99,12 @@
   (let [[f k v] (first txn)]
     (c/assert-applied
       (a/execute session
-                 (h/update (table-for test k)
+                 (merge (h/update (table-for test k)
                            (h/set-columns {:value [+ [v]]})
                            (h/where [[= :part 0]
-                                     [= :id k]])
-                           (h/only-if [[= :lwt_trivial nil]]))
+                                     [= :id k]]))
+                        (when (:lwt test)
+                          (h/only-if [[= :lwt_trivial nil]])))
                  (c/write-opts test))))
   txn)
 
@@ -171,11 +173,21 @@
   client/Reusable
   (reusable? [_ _] true))
 
-
 (defn workload
   "See options for jepsen.tests.append/test"
   [opts]
-  (let [w (append/test opts)]
+  (let [opts (assoc opts :consistency-models
+                    (if (and (:lwt opts)
+                             (= :serial (:read-consistency opts :serial)))
+                      ; Under LWT updates and SERIAL reads, we should
+                      ; get strict serializability.
+                      [:strict-serializable]
+                      ; Otherwise, the Scylla docs claim that UPDATE and BATCH
+                      ; are "performed in isolation" when on a single partition
+                      ; key. That's the case for our workload, so we search for
+                      ; serializability.
+                      [:serializable]))
+        w (append/test opts)]
     (assoc w
            :client (Client. nil)
            :generator (gen/filter (fn [op]
