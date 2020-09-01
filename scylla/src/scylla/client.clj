@@ -33,17 +33,31 @@
           (* 1000)
           long))))
 
+(def ts-uncertainty-s
+  "Timestamp uncertainty window, in seconds."
+  100)
+
+(def ts-quantum-s
+  "Timestamps are quantized to fall this many seconds apart."
+  30)
+
+(defn quantize-ms
+  "Quantizes a timestamp in ms."
+  [ts]
+  (- ts (mod ts (* ts-quantum-s 1000))))
+
 (defn noisy-timestamps
   "This timestamp generator returns randomly distributed values around now, but
-  with 100 seconds of uncertainty."
+  with 100 seconds of uncertainty, and quantized to measure behavior under
+  collisions."
   []
   (reify TimestampGenerator
     (next [x]
-      (let [uncertainty-s   100
-            uncertainty-ms  (* 1000 uncertainty-s)]
+      (let [uncertainty-ms  (* 1000 ts-uncertainty-s)]
         (-> (System/currentTimeMillis)
             (+ (rand-int uncertainty-ms))
             (- (/ uncertainty-ms 2))
+            quantize-ms
             (* 1000)
             long)))))
 
