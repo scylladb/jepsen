@@ -107,15 +107,7 @@
                   "/var/log/scylla/scylla.log")
           (c/exec :echo
                   ":syslogtag, startswith, \"scylla\" /var/log/scylla/scylla.log\n& ~" :> "/etc/rsyslog.d/10-scylla.conf")
-          (c/exec :service :rsyslog :restart)
-
-          ; We don't presently use this, but it might come in handy if we have
-          ; to test binaries later.
-          (info "copy scylla start script to node")
-          (c/su
-            (c/exec :echo (slurp (io/resource "start-scylla.sh"))
-                    :> "/start-scylla.sh")
-            (c/exec :chmod :+x "/start-scylla.sh")))))
+          (c/exec :service :rsyslog :restart))))
 
 (defn seeds
   "Returns a comma-separated string of seed nodes to join to."
