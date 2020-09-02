@@ -95,6 +95,34 @@
           (debian/install [:adoptopenjdk-8-hotspot])
 
           (info "installing ScyllaDB")
+
+          ; If the version has changed, we wipe out the apt repo file and
+          ; uninstall the existing packages.
+          (let [repo-file "/etc/apt/sources.list.d/scylla.list"]
+            (when (cu/exists? repo-file)
+              (let [prev-version ((re-find #"scylladb-([\d\.]+)"
+                                           (c/exec :cat repo-file)) 1)]
+              (when (not= prev-version (:version test))
+                (info "Version changed from" prev-version "to" (:version test)
+                      "- uninstalling packages and replacing apt repo")
+                ; NOTE: Scylla might change their packaging later; you might
+                ; need to expand this list to avoid getting a mixed system. I
+                ; feel like apt *should* prevent mixed versions between, say,
+                ; scylla and scylla-server, but it apparently doesn't. :(
+                ;
+                ; TODO: maybe figure out how to find transitive scylla-only
+                ; deps and remove them automatically?
+                (c/exec :apt-get :remove :-y :--purge
+                        :scylla
+                        :scylla-conf
+                        :scylla-kernel-conf
+                        :scylla-python3
+                        :scylla-server
+                        :scylla-jmx
+                        :scylla-tools
+                        :scylla-tools-core))
+                (c/exec :rm :-rf repo-file))))
+
           (debian/add-repo!
             "scylla"
             (str "deb  [arch=amd64] http://downloads.scylladb.com/downloads/"
