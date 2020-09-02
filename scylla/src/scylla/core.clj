@@ -222,6 +222,11 @@
     :parse-fn keyword
     :validate [consistency-levels (cli/one-of consistency-levels)]]
 
+   [nil "--read-serial-consistency LEVEL"
+    "What *serial* consistency level should we set for reads? The C* Java driver docs say this is ignored, but it might actually be used in Scylla?"
+    :parse-fn keyword
+    :validate [consistency-levels (cli/one-of consistency-levels)]]
+
    ["-v" "--version VERSION" "What version of Scylla should we test?"
     :default "4.2"]
 

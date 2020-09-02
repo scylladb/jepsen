@@ -155,9 +155,11 @@
 
   to provide default options suitable for your workload."
   [test]
-  (let [c (:read-consistency test)]
+  (let [c  (:read-consistency test)
+        sc (:read-serial-consistency test)]
     (cond-> {}
-      c (assoc :consistency c))))
+      c  (assoc :consistency c)
+      sc (assoc :serial-consistency sc))))
 
 (defn write-opts
   "Returns an options map, suitable for passing to alia/execute!, for a write.
