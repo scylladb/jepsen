@@ -191,6 +191,7 @@
     :default true]
 
    [nil "--max-txn-length INT" "What's the most operations we can execute per transaction?"
+    :default  5
     :parse-fn parse-long
     :validate [pos? "must be positive"]]
 
@@ -212,6 +213,11 @@
    [nil "--[no-]noisy-timestamps" "If set, randomly fuzz timestamps to simulate behavior in a cluster without perfect clocks."
     :default  true]
 
+   [nil "--partition-count NUM" "How many partitions should we spread operations across?"
+    :default 1
+    :parse-fn parse-long
+    :validate? [pos? "must be positive"]]
+
    [nil "--phi-level LEVEL" "What value should we use for the phi-accrual failure detector? Higher numbers slow down transitions during partitions."
     :default 2]
 
@@ -228,6 +234,11 @@
     "What *serial* consistency level should we set for reads? The C* Java driver docs say this is ignored, but it might actually be used in Scylla?"
     :parse-fn keyword
     :validate [consistency-levels (cli/one-of consistency-levels)]]
+
+   [nil "--table-count NUM" "How many tables should we spread operations across?"
+    :default 1
+    :parse-fn parse-long
+    :validate? [pos? "must be positive"]]
 
    ["-v" "--version VERSION" "What version of Scylla should we test?"
     :default "4.2"]

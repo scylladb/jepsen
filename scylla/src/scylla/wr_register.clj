@@ -12,15 +12,32 @@
             [qbits [alia :as a]
                    [hayt :as h]]))
 
+(defn table-count
+  "How many tables should we use for this test?"
+  [test]
+  (:table-count test))
+
 (defn table-for
   "What table should we use for this key?"
   [test k]
-  (str "registers"))
+  (str "registers_"
+       (mod (hash [:table k]) (table-count test))))
 
 (defn all-tables
   "All tables for a test."
   [test]
-  (mapv (partial table-for test) [0]))
+  (mapv (partial str "registers_")
+        (range (table-count test))))
+
+(defn part-count
+  "How many partitions should we use for this test?"
+  [test]
+  (:partition-count test))
+
+(defn part-for
+  "What partition should we use for this key?"
+  [test k]
+  (mod (hash [:part k]) (part-count test)))
 
 (defn maybe-long
   "Coerces non-null values to longs; nil values remain nil."
@@ -34,7 +51,7 @@
   (let [queries (map (fn [[f k v]]
                        (merge (h/update (table-for test k)
                                         (h/set-columns {:value v})
-                                        (h/where [[= :part 0]
+                                        (h/where [[= :part (part-for test k)]
                                                   [= :id k]]))
                               (when (:lwt test)
                                 ; This trivial IF always returns true.
@@ -55,12 +72,16 @@
         tables  (distinct (map (partial table-for test) ks))
         _       (assert (= 1 (count tables)))
         table   (first tables)
+        parts   (distinct (map (partial part-for test) ks))
+        _       (assert (= 1 (count parts)))
+        part    (first parts)
         results (a/execute session
                            (h/select table
-                                     (h/where [[= :part 0]
-                                               [:in :id ks]]))
+                                     (h/where [[=   :part part]
+                                               [:in :id   ks]]))
                            (merge {:consistency :serial}
                                   (c/read-opts test)))
+        ; We can stitch these back together because ids are globally unique.
         values  (into {} (map (juxt :id (comp maybe-long :value)) results))]
     (mapv (fn [[f k v]] [f k (get values k)]) txn)))
 
@@ -73,7 +94,7 @@
       (a/execute session
                  (merge (h/update (table-for test k)
                                   (h/set-columns {:value v})
-                                  (h/where [[= :part 0]
+                                  (h/where [[= :part (part-for test k)]
                                             [= :id k]]))
                         (when (:lwt test)
                           (h/only-if [[= :lwt_trivial nil]])))
@@ -86,7 +107,7 @@
   [test session [[f k v]]]
   [[f k (->> (a/execute session
                         (h/select (table-for test k)
-                                  (h/where [[= :part 0]
+                                  (h/where [[= :part (part-for test k)]
                                             [= :id   k]]))
                         (merge {:consistency :serial}
                                (c/read-opts test)))
@@ -103,6 +124,16 @@
   "Is this txn read-only?"
   [txn]
   (every? (comp #{:r} first) txn))
+
+(defn single-part?
+  "Are all keys in this txn located in a single partition?"
+  [test txn]
+  (<= (count (set (map (comp (partial part-for test) second) txn))) 1))
+
+(defn single-table?
+  "Are all keys in this txn located in a single table?"
+  [test txn]
+  (<= (count (set (map (comp (partial table-for test) second) txn))) 1))
 
 (defn apply-txn!
   "Takes a test, a session, and a txn. Performs the txn, returning the
@@ -140,7 +171,7 @@
                                                 ; kind of IF statement (why?),
                                                 ; so we leave a trivial null
                                                 ; column here.
-                                                :lwt_trivial    :int
+                                                :lwt_trivial  :int
                                                 :value        :int
                                                 :primary-key  [:part :id]})
                          (h/with {:compaction {:class (:compaction-strategy test)}})))))))
@@ -161,15 +192,45 @@
   client/Reusable
   (reusable? [_ _] true))
 
+(defn generator
+  "This is sort of silly, but... we want to test a mix of single-key and
+  multi-key txns. However, Scylla imposes a bunch of restrictions on those
+  txns: they have to be on a single partition, a single table, can't mix reads
+  and writes, etc. If we naively filter the usual Elle txn generator, we wind
+  up throwing out almost *every* multi-key txn.
+
+  To work around this (and it's not a GREAT workaround, mind you), we actually
+  construct a generator with a mandatory longer txn length, filter that, then
+  cut its txns down to size randomly."
+  [opts]
+  (let [lower (:min-txn-length opts 1)
+        upper (:max-txn-length opts)
+        delta (- upper lower)]
+    (if (<= upper 1)
+      ; We're only generating singleton txns
+      (wr/gen opts)
+      ; We want a mix of singleton and longer txns
+      (->> (assoc opts :min-txn-length 2)
+           wr/gen
+           (gen/filter (fn [op]
+                         (let [txn (:value op)]
+                           ; We can't do mixed rw txns, nor can we execute
+                           ; txns across multiple partitions or tables.
+                           (and (single-table? opts txn)
+                                (single-part? opts txn)
+                                (or (read-only? txn)
+                                    (write-only? txn))))))
+           ; Cut txns down to size if needed. Yeah, this re-biases the
+           ; distribution of lengths a bit, but... it's not awful.
+           (gen/map (fn [op]
+                      (let [size (+ lower (rand-int delta))]
+                        (assoc op :value (vec (take size (:value op)))))))))))
+
 (defn workload
   "See options for jepsen.tests.append/test"
   [opts]
   {:client    (Client. nil)
-   :generator (gen/filter (fn [op]
-                            (let [txn (:value op)]
-                              (or (read-only? txn)
-                                  (write-only? txn))))
-                          (wr/gen opts))
+   :generator (generator opts)
    :checker   (wr/checker
                 (merge
                   (if (and (:lwt opts)
