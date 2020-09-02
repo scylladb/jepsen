@@ -26,6 +26,10 @@
                                               RetryPolicy$RetryDecision)
            (java.net InetAddress)))
 
+(def scylla-bin
+  "The full path to the scylla binary."
+  "/opt/scylladb/libexec/scylla")
+
 (defn wait-for-recovery
   "Waits for the driver to report all nodes are up"
   [timeout-secs conn]
@@ -80,7 +84,7 @@
 
 (defn install!
   "Installs ScyllaDB on the given node."
-  [node version]
+  [node test]
   (c/su
     (c/cd "/tmp"
           ; Scylla has a mandatory dep on jdk8
@@ -94,12 +98,18 @@
           (debian/add-repo!
             "scylla"
             (str "deb  [arch=amd64] http://downloads.scylladb.com/downloads/"
-                 "scylla/deb/debian/scylladb-" version " buster non-free")
+                 "scylla/deb/debian/scylladb-" (:version test)
+                 " buster non-free")
             "hkp://keyserver.ubuntu.com:80"
             "5e08fbd8b5d6ec9c")
           ; Scylla wants to install SNTP/NTP, which is going to break in
           ; containers--we skip the install here.
           (debian/install [:scylla :scylla-jmx :scylla-tools :ntp-])
+
+          ; Replace the scylla binary, if applicable
+          (when-let [bin (:local-scylla-bin test)]
+            (info "Replacing" scylla-bin "with local file" bin)
+            (c/upload bin scylla-bin))
 
           (info "configuring scylla logging")
           (c/exec :mkdir :-p (lit "/var/log/scylla"))
@@ -153,7 +163,7 @@
       (setup! [db test node]
         (db/setup! tcpdump test node)
         (doto node
-          (install! version)
+          (install! test)
           (configure! test))
         (let [t1 (util/linear-time-nanos)]
           (guarded-start! node test db)

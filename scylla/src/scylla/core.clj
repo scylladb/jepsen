@@ -185,6 +185,8 @@
     :parse-fn parse-long
     :validate [pos? "must be positive"]]
 
+   [nil "--local-scylla-bin FILE" (str "If provided, uploads the local file to each DB node, replacing " db/scylla-bin ". Helpful for testing development builds.")]
+
    [nil "--[no-]lwt" "Enables or disables LWT for some workloads."
     :default true]
 
