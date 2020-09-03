@@ -216,7 +216,7 @@
    [nil "--partition-count NUM" "How many partitions should we spread operations across?"
     :default 1
     :parse-fn parse-long
-    :validate? [pos? "must be positive"]]
+    :validate [pos? "must be positive"]]
 
    [nil "--phi-level LEVEL" "What value should we use for the phi-accrual failure detector? Higher numbers slow down transitions during partitions."
     :default 2]
@@ -238,7 +238,9 @@
    [nil "--table-count NUM" "How many tables should we spread operations across?"
     :default 1
     :parse-fn parse-long
-    :validate? [pos? "must be positive"]]
+    :validate [pos? "must be positive"]]
+
+   [nil "--trace-cql" "If set, logs executed CQL statements to `trace.cql`."]
 
    ["-v" "--version VERSION" "What version of Scylla should we test?"
     :default "4.2"]

@@ -192,6 +192,11 @@
                              :clients-only? true})]
     (reify db/DB
       (setup! [db test node]
+        ; As a side-effect, this is where we start tracing. Sort of a hack, but
+        ; we're never going to want to *disable* tracing, and tests run
+        ; sequentially, so... it should be fine.
+        (when (:trace-cql test) (sc/start-tracing! test))
+
         (db/setup! tcpdump test node)
         (doto node
           (install! test)
@@ -215,7 +220,9 @@
                        (lit "/var/lib/scylla/hints/*")
                        (lit "/var/lib/scylla/view_hints/*")
                        "/var/log/scylla/scylla.log")))
-        (db/teardown! tcpdump test node))
+        (db/teardown! tcpdump test node)
+
+        (when (:trace-cql test) (sc/stop-tracing! test)))
 
       db/LogFiles
       (log-files [db test node]

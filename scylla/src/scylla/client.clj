@@ -1,12 +1,15 @@
 (ns scylla.client
   "Basic Scylla client operations."
-  (:require [qbits.alia :as alia]
+  (:require [clojure.java.io :as io]
+            [qbits.alia :as alia]
             [qbits.alia.policy [load-balancing :as load-balancing]]
             [qbits.hayt :as hayt]
             [dom-top.core :as dt]
             [clojure.tools.logging :refer [info warn]]
+            [jepsen [store :as store]]
             [slingshot.slingshot :refer [try+ throw+]])
-  (:import (com.datastax.driver.core.exceptions NoHostAvailableException
+  (:import (clojure.lang Var)
+           (com.datastax.driver.core.exceptions NoHostAvailableException
                                                 OperationTimedOutException
                                                 ReadFailureException
                                                 ReadTimeoutException
@@ -21,8 +24,8 @@
                                      TimestampGenerator)
            (com.datastax.driver.core.policies RetryPolicy
                                               RetryPolicy$RetryDecision)
+           (java.io Writer)
            (java.net InetSocketAddress)))
-
 
 (defn naive-timestamps
   "This timestamp generator uses System/currentTimeMillis as its source."
@@ -311,3 +314,47 @@
   they need to be idempotent!"
   [& forms]
   (cons 'do (map wrap-retry forms)))
+
+(def ^:dynamic ^Writer *trace-writer*
+  "This Writer is where we log trace statements to. It's intended to be
+  dynamically bound during test execution."
+  nil)
+
+; We're going to be rebinding alia/execute; this is the original version of the
+; function.
+(defonce original-alia-execute
+  alia/execute)
+
+(defn traced-execute
+  "A wrapper for alia/execute which logs CQL statements to a file."
+  [session query & args]
+  (when-let [w *trace-writer*]
+    (let [query-str (cond (map? query)
+                          (str (hayt/->raw query))
+
+                          (string? query)
+                          query
+
+                          true (str "# ERROR: Don't know how to log query "
+                                    (type query) ": "
+                                    (pr-str query)))]
+      (locking w
+        (.write w query-str)
+        (.write w "\n"))))
+  (apply original-alia-execute session query args))
+
+(defn start-tracing!
+  "Performs a basic form of query tracing for the body of the macro, by
+  intercepting calls to alia/execute and journaling them to a trace file. Not
+  thread-safe; redefines alia/execute globally!"
+  [test]
+  (def *trace-writer* (io/writer (store/path! test "trace.cql")))
+  (.bindRoot ^Var #'alia/execute traced-execute))
+
+(defn stop-tracing!
+  "Shuts down the tracing facility."
+  [test]
+  (when-let [w *trace-writer*]
+    (.close *trace-writer*)
+    (def *trace-writer* nil))
+  (.bindRoot ^Var #'alia/execute original-alia-execute))
