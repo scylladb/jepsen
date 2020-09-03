@@ -38,7 +38,7 @@ SCYLLA_HOME=/var/lib/scylla
 SCYLLA_CONF=/etc/scylla
 
 # scylla arguments (for posix mode)
-SCYLLA_ARGS="--log-to-syslog 1 --log-to-stdout 0 --default-log-level info --network-stack posix --smp 2 --overprovisioned"
+SCYLLA_ARGS="--log-to-syslog 1 --log-to-stdout 0 --default-log-level info --network-stack posix --smp 2 --overprovisioned $EXTRA_SCYLLA_ARGS"
 
 ## scylla arguments (for dpdk mode)
 #SCYLLA_ARGS="--log-to-syslog 1 --log-to-stdout 0 --default-log-level info --network-stack native --dpdk-pmd"

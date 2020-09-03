@@ -187,6 +187,10 @@
 
    [nil "--local-scylla-bin FILE" (str "If provided, uploads the local file to each DB node, replacing " db/scylla-bin ". Helpful for testing development builds.")]
 
+   [nil "--logger-log-level LOGGER_AND_LEVEL" "Configures Scylla's server-side logging facilities. Try, for example, --logger-log-level storage_proxy=trace."
+    :default   []
+    :assoc-fn (fn [m k v] (update m k conj v))]
+
    [nil "--[no-]lwt" "Enables or disables LWT for some workloads."
     :default true]
 

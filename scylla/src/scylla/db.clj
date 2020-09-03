@@ -157,12 +157,23 @@
        (map dns-resolve)
        (str/join ",")))
 
+(defn extra-scylla-args
+  "Extra scylla args which are substituted into the SCYLLA_ARGS config."
+  [test]
+  ; Custom logger log levels
+  (->> (:logger-log-level test)
+       (map (partial str "--logger-log-level "))
+       (str/join " ")))
+
 (defn configure!
   "Uploads configuration files to the current node."
   [node test]
   (info "configuring ScyllaDB")
   (c/su
-    (c/exec :echo (slurp (io/resource "default/scylla-server"))
+    (c/exec :echo
+            (-> (io/resource "default/scylla-server")
+                slurp
+                (str/replace "$EXTRA_SCYLLA_ARGS" (extra-scylla-args test)))
             :> "/etc/default/scylla-server")
     (c/exec :echo
             (-> (io/resource "scylla.yaml")
