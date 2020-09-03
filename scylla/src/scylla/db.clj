@@ -134,10 +134,13 @@
           ; containers--we skip the install here.
           (debian/install [:scylla :scylla-jmx :scylla-tools :ntp-])
 
-          ; Replace the scylla binary, if applicable
-          (when-let [bin (:local-scylla-bin test)]
-            (info "Replacing" scylla-bin "with local file" bin)
-            (c/upload bin scylla-bin))
+          (if-let [bin (:local-scylla-bin test)]
+            ; Replace the scylla binary with local copy
+            (do (info "Replacing" scylla-bin "with local file" bin)
+                (c/upload bin scylla-bin))
+            ; If we're NOT replacing, we need to reinstall to override any
+            ; *previously* installed bin:
+            (c/exec :apt-get :install :--reinstall :scylla-server))
 
           (info "configuring scylla logging")
           (c/exec :mkdir :-p (lit "/var/log/scylla"))
