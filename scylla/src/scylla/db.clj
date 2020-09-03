@@ -140,15 +140,7 @@
                 (c/upload bin scylla-bin))
             ; If we're NOT replacing, we need to reinstall to override any
             ; *previously* installed bin:
-            (c/exec :apt-get :install :--reinstall :scylla-server))
-
-          (info "configuring scylla logging")
-          (c/exec :mkdir :-p (lit "/var/log/scylla"))
-          (c/exec :install :-o :root :-g :adm :-m :0640 "/dev/null"
-                  "/var/log/scylla/scylla.log")
-          (c/exec :echo
-                  ":syslogtag, startswith, \"scylla\" /var/log/scylla/scylla.log\n& ~" :> "/etc/rsyslog.d/10-scylla.conf")
-          (c/exec :service :rsyslog :restart))))
+            (c/exec :apt-get :install :--reinstall :scylla-server)))))
 
 (defn seeds
   "Returns a comma-separated string of seed nodes to join to."
@@ -165,8 +157,28 @@
        (map (partial str "--logger-log-level "))
        (str/join " ")))
 
-(defn configure!
-  "Uploads configuration files to the current node."
+(defn configure-journalctl!
+  "Sets up journalctl logging stuff"
+  []
+  (c/su
+    (c/exec :sed :-i "s/^#RateLimitIntervalSec=.*/RateLimitInterval=1s/" "/etc/systemd/journald.conf")
+    (c/exec :sed :-i "s/^#RateLimitBurst=.*/RateLimitBurst=0/" "/etc/systemd/journald.conf")
+    (c/exec :systemctl :restart :systemd-journald)))
+
+(defn configure-rsyslog!
+  "Sets up rsyslog for Scylla"
+  []
+  (c/su
+    (info "configuring scylla logging")
+    (c/exec :mkdir :-p "/var/log/scylla")
+    (c/exec :install :-o :root :-g :adm :-m :0640 "/dev/null"
+            "/var/log/scylla/scylla.log")
+    (c/exec :echo (slurp (io/resource "rsyslog.d/10-scylla.conf"))
+            :> "/etc/rsyslog.d/10-scylla.conf")
+    (c/exec :service :rsyslog :restart)))
+
+(defn configure-scylla!
+  "Sets up Scylla config files"
   [node test]
   (info "configuring ScyllaDB")
   (c/su
@@ -184,6 +196,13 @@
                 (str/replace "$HINTED_HANDOFF"  (str (boolean (:hinted-handoff test))))
                 (str/replace "$PHI_LEVEL"       (str (:phi-level test))))
             :> "/etc/scylla/scylla.yaml")))
+
+(defn configure!
+  "Uploads configuration files to the current node."
+  [node test]
+  (configure-journalctl!)
+  (configure-rsyslog!)
+  (configure-scylla! node test))
 
 (defn guarded-start!
   "Guarded start that only starts nodes that have joined the cluster already
