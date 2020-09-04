@@ -17,10 +17,11 @@
                                                 UnavailableException
                                                 WriteFailureException
                                                 WriteTimeoutException)
-           (com.datastax.driver.core Session
+           (com.datastax.driver.core AtomicMonotonicTimestampGenerator
                                      Cluster
-                                     Metadata
                                      Host
+                                     Metadata
+                                     Session
                                      TimestampGenerator)
            (com.datastax.driver.core.policies RetryPolicy
                                               RetryPolicy$RetryDecision)
@@ -40,59 +41,72 @@
   "Timestamp uncertainty window, in seconds."
   100)
 
-(def ts-quantum-s
-  "Timestamps are quantized to fall this many seconds apart."
-  30)
-
-(defn quantize-ms
-  "Quantizes a timestamp in ms."
-  [ts]
-  (- ts (mod ts (* ts-quantum-s 1000))))
-
-(defn noisy-timestamps
-  "This timestamp generator returns randomly distributed values around now, but
-  with 100 seconds of uncertainty, and quantized to measure behavior under
-  collisions."
-  []
+(defn fuzz-timestamps
+  "Wraps a timestamp generator, fuzzing its values with ~100 seconds of
+  uncertainty."
+  [^TimestampGenerator ts-gen]
   (reify TimestampGenerator
     (next [x]
-      (let [uncertainty-ms  (* 1000 ts-uncertainty-s)]
-        (-> (System/currentTimeMillis)
-            (+ (rand-int uncertainty-ms))
-            (- (/ uncertainty-ms 2))
-            quantize-ms
-            (* 1000)
-            long)))))
+      (let [uncertainty-us  (* 1000000 ts-uncertainty-s)]
+        (-> (.next ts-gen)
+            (+ (rand-int uncertainty-us))
+            (- (/ uncertainty-us 2))
+            long)))
+
+    Object
+    (toString [_] (str "(fuzz-timestamps " (str ts-gen) ")"))))
+
+(def ts-quantum-s
+  "Timestamps are quantized such that all timestamps in a window this many
+  seconds long are pinned to the same value."
+  30)
+
+(defn quantize-timestamps
+  "Wraps a TimestampGenerator, quantizing its output."
+  [^TimestampGenerator ts-gen]
+  (reify TimestampGenerator
+    (next [x]
+      (let [ts (.next ts-gen)]
+        (- ts (mod ts (* ts-quantum-s 1000000)))))
+
+    Object
+    (toString [_] (str "(quantize-timestamps " (str ts-gen) ")"))))
+
+(defn timestamp-generator
+  "Constructs a TimestampGenerator for a test. Uses :fuzz-timestamps and
+  :quantize-timestamps to wrap an AtomicMonotonicTimestampGenerator."
+  [test]
+  (cond-> (AtomicMonotonicTimestampGenerator.)
+          (:fuzz-timestamps test)     fuzz-timestamps
+          (:quantize-timestamps test) quantize-timestamps))
 
 (defn open
   "Returns an map of :cluster :session bound to the given node."
   [test node]
-  (let [opts (cond->
-               {:contact-points [node]
-                ; We want to force all requests to go to this particular node,
-                ; to make sure that every node actually tries to execute
-                ; requests--if we allow the smart client to route requests to
-                ; other nodes, we might fail to observe behavior on isolated
-                ; nodes during a partition. The docs suggest this works, but it
-                ; looks like it doesn't actually in practice:
-                ;:load-balancing-policy {:whitelist [{:hostname node
-                ;                                     :port 9042}]}
-                ; This *mostly* works. It looks like table creation and some
-                ; other queries still get routed to other nodes, but at least
-                ; DML goes to only the specified node?
-                :load-balancing-policy
-                (load-balancing/whitelist-policy
-                  (load-balancing/round-robin-policy)
-                  [(InetSocketAddress. node 9042)])
-                ; By default the client has an exponential backoff on reconnect
-                ; attempts, which can keep us from detecting when a node has
-                ; come back
-                :reconnection-policy {:type              :constant
-                                      :constant-delay-ms 1000}}
-
-               (:noisy-timestamps test) (assoc :timestamp-generator
-                                               (noisy-timestamps)))
+  (let [opts {:contact-points [node]
+              ; We want to force all requests to go to this particular node,
+              ; to make sure that every node actually tries to execute
+              ; requests--if we allow the smart client to route requests to
+              ; other nodes, we might fail to observe behavior on isolated
+              ; nodes during a partition. The docs suggest this works, but it
+              ; looks like it doesn't actually in practice:
+              ;:load-balancing-policy {:whitelist [{:hostname node
+              ;                                     :port 9042}]}
+              ; This *mostly* works. It looks like table creation and some
+              ; other queries still get routed to other nodes, but at least
+              ; DML goes to only the specified node?
+              :load-balancing-policy
+              (load-balancing/whitelist-policy
+                (load-balancing/round-robin-policy)
+                [(InetSocketAddress. node 9042)])
+              ; By default the client has an exponential backoff on reconnect
+              ; attempts, which can keep us from detecting when a node has
+              ; come back
+              :reconnection-policy {:type              :constant
+                                    :constant-delay-ms 1000}
+              :timestamp-generator (timestamp-generator test)}
         cluster (alia/cluster opts)]
+    (info :ts-gen (:timestamp-generator opts))
     (try (let [session (alia/connect cluster)]
            {:cluster cluster
             :session session})
@@ -348,7 +362,7 @@
   intercepting calls to alia/execute and journaling them to a trace file. Not
   thread-safe; redefines alia/execute globally!"
   [test]
-  (def *trace-writer* (io/writer (store/path! test "trace.cql")))
+  (set! *trace-writer* (io/writer (store/path! test "trace.cql")))
   (.bindRoot ^Var #'alia/execute traced-execute))
 
 (defn stop-tracing!
@@ -356,5 +370,5 @@
   [test]
   (when-let [w *trace-writer*]
     (.close *trace-writer*)
-    (def *trace-writer* nil))
+    (set! *trace-writer* nil))
   (.bindRoot ^Var #'alia/execute original-alia-execute))

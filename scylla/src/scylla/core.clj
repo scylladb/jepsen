@@ -25,7 +25,8 @@
                     [list-append    :as list-append]
                     [mv             :as mv]
                     [nemesis        :as nemesis]
-                    [wr-register    :as wr-register]]
+                    [wr-register    :as wr-register]
+                    [write-isolation :as write-isolation]]
             [scylla.collections [map :as cmap]
                                 [set :as cset]]
             [qbits.commons.enum])
@@ -42,7 +43,8 @@
    :list-append     list-append/workload
    :mv              mv/workload
    :cset            cset/workload
-   :wr-register     wr-register/workload})
+   :wr-register     wr-register/workload
+   :write-isolation write-isolation/workload})
 
 (def standard-workloads
   "The workload names we run for test-all by default."
@@ -178,6 +180,9 @@
   [[nil "--compaction-strategy CLASS" "What compaction strategy should we use for tables?"
     :default "SizeTieredCompactionStrategy"]
 
+   [nil "--[no-]fuzz-timestamps" "If set, randomly fuzz timestamps to simulate behavior in a cluster without perfect clocks."
+    :default  true]
+
    [nil "--[no-]hinted-handoff" "Enable or disable hinted handoff."
     :default true]
 
@@ -214,9 +219,6 @@
     :parse-fn read-string
     :validate [#(and (number? %) (pos? %)) "must be a positive number"]]
 
-   [nil "--[no-]noisy-timestamps" "If set, randomly fuzz timestamps to simulate behavior in a cluster without perfect clocks."
-    :default  true]
-
    [nil "--partition-count NUM" "How many partitions should we spread operations across?"
     :default 1
     :parse-fn parse-long
@@ -224,6 +226,9 @@
 
    [nil "--phi-level LEVEL" "What value should we use for the phi-accrual failure detector? Higher numbers slow down transitions during partitions."
     :default 2]
+
+   [nil "--[no-]quantize-timestamps" "If set, quantizes timestamps to make collisions more likely."
+    :default true]
 
    ["-r" "--rate HZ" "Approximate number of requests per second per thread"
     :default 10
