@@ -44,7 +44,8 @@
    :mv              mv/workload
    :cset            cset/workload
    :wr-register     wr-register/workload
-   :write-isolation write-isolation/workload})
+   :write-isolation write-isolation/workload
+   :write-isolation-single-write write-isolation/single-write-workload})
 
 (def standard-workloads
   "The workload names we run for test-all by default."

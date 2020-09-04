@@ -87,3 +87,23 @@
   {:client    (wr-register/->Client nil)
    :generator (generator)
    :checker   (checker)})
+
+(defn single-write-generator
+  "We generate a write for a single key range, and interleave it with several
+  reads of that same key range, then move on to a new range."
+  []
+  (->> (iterate (partial + key-range-size) 0)
+       (mapcat (fn [lower]
+                 (let [ks (range lower (+ lower key-range-size))
+                       w  {:f :write, :value (mapv (fn [k] [:w k  1])   ks)}
+                       r  {:f :read,  :value (mapv (fn [k] [:r k nil]) ks)}]
+                   [r r r r r w r r r r r r r r r r]))))) ; it's nicki minaj 🤪
+
+(defn single-write-workload
+  "This variant writes each key range only once. Scylla theoretically
+  (https://github.com/scylladb/scylla/issues/2379#issuecomment-301160270) might
+  allow reads to observe partly-applied batches, but some cursory testing
+  hasn't revealed that behavior yet."
+  [opts]
+  (assoc (workload opts)
+         :generator (single-write-generator)))
