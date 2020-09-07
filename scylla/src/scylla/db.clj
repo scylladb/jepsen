@@ -82,65 +82,107 @@
   [node & args]
   (c/on node (apply c/exec (lit "nodetool") args)))
 
+(defn install-jdk8!
+  "Scylla has a mandatory dep on jdk8, which isn't normally available in Debian
+  Buster."
+  []
+  (info "installing JDK8")
+  (c/su
+    ; LIVE DANGEROUSLY
+    (c/exec :wget :-qO :- "https://adoptopenjdk.jfrog.io/adoptopenjdk/api/gpg/key/public" | :apt-key :add :-)
+    (debian/add-repo! "adoptopenjdk" "deb  [arch=amd64] https://adoptopenjdk.jfrog.io/adoptopenjdk/deb/ buster main")
+    (debian/install [:adoptopenjdk-8-hotspot])))
+
+(def repo-file
+  "Where should we put Scylla's deb repo line?"
+  "/etc/apt/sources.list.d/scylla.list")
+
+(defn uninstall-scylla!
+  "Removes Scylla packages--e.g. in preparation to install a different version.
+  Leaves the repo file in place."
+  []
+  (c/su
+    ; NOTE: Scylla might change their packaging later; you might need to expand
+    ; this list to avoid getting a mixed system. I feel like apt *should*
+    ; prevent mixed versions between, say, scylla and scylla-server, but it
+    ; apparently doesn't. :(
+    ;
+    ; TODO: maybe figure out how to find transitive scylla-only deps and remove
+    ; them automatically? Autoremove might work here.
+    (c/exec :apt-get :remove :-y :--purge
+            :scylla
+            :scylla-conf
+            :scylla-kernel-conf
+            :scylla-python3
+            :scylla-server
+            :scylla-jmx
+            :scylla-tools
+            :scylla-tools-core)))
+
+(defn prep-for-version-change!
+  "If the version is changing, we wipe out the apt repo file and uninstall
+  existing packages."
+  [test]
+  (c/su
+    (info "installing ScyllaDB")
+    ; If the version has changed, we wipe out the apt repo file and
+    ; uninstall the existing packages.
+    (when (cu/exists? repo-file)
+      (let [prev-version ((re-find #"scylladb-([\d\.]+)"
+                                   (c/exec :cat repo-file)) 1)]
+        (when (not= prev-version (:version test))
+          (info "Version changed from" prev-version "to" (:version test)
+                "- uninstalling packages and replacing apt repo")
+          (uninstall-scylla!)
+          (c/exec :rm :-rf repo-file))))))
+
+(defn install-scylla-from-apt!
+  "Installs Scylla from apt, like one normally does. Creates repo file and
+  calls apt-get install."
+  [test]
+  (c/su
+    (debian/add-repo!
+      "scylla"
+      (str "deb  [arch=amd64] http://downloads.scylladb.com/downloads/"
+           "scylla/deb/debian/scylladb-" (:version test)
+           " buster non-free")
+      "hkp://keyserver.ubuntu.com:80"
+      "5e08fbd8b5d6ec9c")
+    ; Scylla wants to install SNTP/NTP, which is going to break in
+    ; containers--we skip the install here.
+    (debian/install [:scylla :scylla-jmx :scylla-tools :ntp-])))
+
+(defn install-local-files!
+  "Our test can take a :local-scylla-bin or :local-deb option, which we use to
+  replace files from the normal apt installation. In order of priority, we
+  choose the bin, the deb, or, if neither is given, forcibly reinstall the apt
+  scylla-server package to replace any previous changes."
+  [test]
+  (c/su
+    ; Potentially install a local override
+    (let [deb (:local-deb test)
+          bin (:local-scylla-bin test)]
+      (cond bin (do (info "Replacing" scylla-bin "with local file" bin)
+                    (c/upload bin scylla-bin))
+
+            deb (do (info "Installing local" deb "on top of existing Scylla")
+                    (let [tmp  (cu/tmp-dir!)
+                          file (str tmp "/scylla.deb")]
+                      (try (c/upload deb file)
+                           (c/exec :dpkg :-i file)
+                           (finally
+                             (c/exec :rm :-rf tmp)))))
+            :else (do ; If we're NOT replacing, we need to reinstall to
+                      ; override any *previously* installed bin
+                      (c/exec :apt-get :install :--reinstall :scylla-server))))))
+
 (defn install!
   "Installs ScyllaDB on the given node."
   [node test]
-  (c/su
-    (c/cd "/tmp"
-          ; Scylla has a mandatory dep on jdk8
-          (info "installing JDK8")
-          ; LIVE DANGEROUSLY
-          (c/exec :wget :-qO :- "https://adoptopenjdk.jfrog.io/adoptopenjdk/api/gpg/key/public" | :apt-key :add :-)
-          (debian/add-repo! "adoptopenjdk" "deb  [arch=amd64] https://adoptopenjdk.jfrog.io/adoptopenjdk/deb/ buster main")
-          (debian/install [:adoptopenjdk-8-hotspot])
-
-          (info "installing ScyllaDB")
-
-          ; If the version has changed, we wipe out the apt repo file and
-          ; uninstall the existing packages.
-          (let [repo-file "/etc/apt/sources.list.d/scylla.list"]
-            (when (cu/exists? repo-file)
-              (let [prev-version ((re-find #"scylladb-([\d\.]+)"
-                                           (c/exec :cat repo-file)) 1)]
-              (when (not= prev-version (:version test))
-                (info "Version changed from" prev-version "to" (:version test)
-                      "- uninstalling packages and replacing apt repo")
-                ; NOTE: Scylla might change their packaging later; you might
-                ; need to expand this list to avoid getting a mixed system. I
-                ; feel like apt *should* prevent mixed versions between, say,
-                ; scylla and scylla-server, but it apparently doesn't. :(
-                ;
-                ; TODO: maybe figure out how to find transitive scylla-only
-                ; deps and remove them automatically?
-                (c/exec :apt-get :remove :-y :--purge
-                        :scylla
-                        :scylla-conf
-                        :scylla-kernel-conf
-                        :scylla-python3
-                        :scylla-server
-                        :scylla-jmx
-                        :scylla-tools
-                        :scylla-tools-core))
-                (c/exec :rm :-rf repo-file))))
-
-          (debian/add-repo!
-            "scylla"
-            (str "deb  [arch=amd64] http://downloads.scylladb.com/downloads/"
-                 "scylla/deb/debian/scylladb-" (:version test)
-                 " buster non-free")
-            "hkp://keyserver.ubuntu.com:80"
-            "5e08fbd8b5d6ec9c")
-          ; Scylla wants to install SNTP/NTP, which is going to break in
-          ; containers--we skip the install here.
-          (debian/install [:scylla :scylla-jmx :scylla-tools :ntp-])
-
-          (if-let [bin (:local-scylla-bin test)]
-            ; Replace the scylla binary with local copy
-            (do (info "Replacing" scylla-bin "with local file" bin)
-                (c/upload bin scylla-bin))
-            ; If we're NOT replacing, we need to reinstall to override any
-            ; *previously* installed bin:
-            (c/exec :apt-get :install :--reinstall :scylla-server)))))
+  (install-jdk8!)
+  (prep-for-version-change! test)
+  (install-scylla-from-apt! test)
+  (install-local-files! test))
 
 (defn seeds
   "Returns a comma-separated string of seed nodes to join to."
