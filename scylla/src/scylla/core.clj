@@ -155,7 +155,15 @@
            (dissoc workload :generator :final-generator) ; These we handle
            {:checker      checker
             :name         (str (name (:workload opts))
-                               " " (str/join "," (map name (:nemesis opts))))
+                               (when (:lwt opts) " lwt")
+                               (when-let [wc (:write-consistency opts)]
+                                 (str " wc:"  (name wc)))
+                               (when-let [wsc (:write-serial-consistency opts)]
+                                 (str " wsc:" (name wsc)))
+                               (when-let [rc (:read-consistency opts)]
+                                 (str " rc:"  (name rc)))
+                               (when-let [n(:nemesis opts)]
+                                 (str " " (str/join "," (map name n)))))
             :os           debian/os
             :db           db
             :nemesis      (:nemesis nemesis)
