@@ -114,37 +114,38 @@
   "Takes a completion operation and yields nil if it looks OK, or a collection
   of error maps if the query and result don't seem to line up."
   [op]
-  (let [{:keys [query result]} (:value op)]
+  (let [{:keys [query result]} (:value op)
+        ; This function returns true if expected and actual are equal, OR if
+        ; actual is nil."
+        =-or-nil? (fn [expected actual]
+                    (or (nil? actual)
+                        (= actual expected)))
+        different? (complement =-or-nil?)]
     (cond-> []
-      ; (not= (count query) (count result))
-      ; (conj {:type      :unexpected-row-count
-      ;        :expected  (count query)
-      ;        :received  (count result)})
-
-      (not= (set (map :key query))
-            (set (map :key result)))
-      (conj {:type      :different-keys
-             :expected  (sort (map :key query))
-             :received  (sort (map :key result))
+      (not= (count query) (count result))
+      (conj {:type      :unexpected-row-count
+             :expected  (count query)
+             :received  (count result)
              :query     query
              :result    result})
 
-      ; Sigh, this is apparently expected behavior
-      ;(not= (distinct (map :key query))
-      ;      (distinct (map :key result)))
-      ;(conj {:type      :out-of-order
-      ;       :expected  (distinct (map :key query))
-      ;       :received  (distinct (map :key result))
+      (some boolean (map different? (map :key query) (map :key result)))
+      (conj {:type     :different-key-in-position
+             :expected (map :key query)
+             :received (map :part result)
+             :query    query
+             :result   result})
+
+      ; This is expected behavior: we return *previous* keys, rather than
+      ; resulting keys, which means newly inserted rows will have nil keys.
+      ;(or (some nil? (map :part result))
+      ;    (some nil? (map :key result)))
+      ;(conj {:type      :nil-key-or-part
+      ;       :nil-key   (remove :key result)
+      ;       :nil-part  (remove :part result)
       ;       :query     query
       ;       :result    result})
-
-      (or (some nil? (map :part result))
-          (some nil? (map :key result)))
-      (conj {:type      :nil-key-or-part
-             :nil-key   (remove :key result)
-             :nil-part  (remove :part result)
-             :query     query
-             :result    result}))))
+      )))
 
 (defn checker
   "I have no idea what this does yet."
@@ -157,10 +158,7 @@
                            (map :type)
                            frequencies
                            (map-vals #(float (/ % (count ok)))))]
-        ; Apparently batches are *supposed* to return out-of-order rows and nil
-        ; keys. They're still broken in another way: failing to return some
-        ; keys at all.
-        {:valid?      (not (:different-keys err-freqs))
+        {:valid?      (empty? errs)
          :errors      errs
          :frequencies err-freqs}))))
 
