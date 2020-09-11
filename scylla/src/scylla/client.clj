@@ -106,7 +106,6 @@
                                     :constant-delay-ms 1000}
               :timestamp-generator (timestamp-generator test)}
         cluster (alia/cluster opts)]
-    (info :ts-gen (:timestamp-generator opts))
     (try (let [session (alia/connect cluster)]
            {:cluster cluster
             :session session})
@@ -127,14 +126,15 @@
 (defn await-open
   "Blocks until a connection is available, then returns that connection."
   [test node]
-  (dt/with-retry [tries 60]
+  (dt/with-retry [tries 10]
     (let [c (open test node)]
       (alia/execute (:session c)
                     (hayt/->raw (hayt/select :system.peers)))
       c)
     (catch NoHostAvailableException e
       (when (zero? tries)
-        (throw+ {:type :await-open-timeout
+        (throw+ {:type :jepsen.db/setup-failed
+                 :msg  :await-open-timeout
                  :node node}))
       (info node "not yet available, retrying")
       (Thread/sleep await-open-interval)
