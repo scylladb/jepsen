@@ -1,10 +1,10 @@
 (ns scylla.db
   "Database setup and teardown."
   (:require [clojure [pprint :refer :all]
-             [string :as str]]
+                     [set :as set]
+                     [string :as str]]
             [clojure.java.io :as io]
             [clojure.java.jmx :as jmx]
-            [clojure.set :as set]
             [clojure.tools.logging :refer [info]]
             [jepsen
              [db        :as db]
@@ -30,6 +30,110 @@
   "The full path to the scylla binary."
   "/opt/scylladb/libexec/scylla")
 
+(def repo-file
+  "Where should we put Scylla's deb repo line?"
+  "/etc/apt/sources.list.d/scylla.list")
+
+(defn dns-resolve
+  "Gets the address of a hostname"
+  [hostname]
+  (.getHostAddress (InetAddress/getByName (name hostname))))
+
+(defn parse-nodetool-status-line
+  "Takes a line from `nodetool status` and returns it as a map. The format of
+  nodetool status is:
+
+    Status=Up/Down
+    |/ State=Normal/Leaving/Joining/Moving
+    --  Address         Load       Tokens       Owns    Host ID                               Rack
+    UN  192.168.122.11  598.11 KB  256          ?       06e6a8ef-41e6-4c7e-8fc0-e6418cf18654  rack1
+
+  which we parse to something like {:status :up, :state :normal, :address ...}"
+  [line]
+  (when-let [[match status state address load tokens owns id rack]
+             (re-find #"^([UD])([NLJM])\s+(.+?)\s+(\?|.+? \wB)\s+(\d+)\s+(.+?)\s+(.+?)\s+(.+?)$" line)]
+    (let [status (case status
+                   "U" :up
+                   "D" :down)
+          state (case state
+                  "N" :normal
+                  "L" :leaving
+                  "J" :joining
+                  "M" :moving)]
+    {:status  status
+     :state   state
+     :address address
+     :load    load
+     :owns    owns
+     :id      id
+     :rack    rack})))
+
+(defn nodetool-status*
+  "Returns the current nodetool status, as visible to the currently bound node,
+  as a sequence of parsed maps."
+  []
+  (let [raw    (c/su (c/exec :nodetool :status))
+        parsed (->> raw
+                    str/split-lines
+                    (keep parse-nodetool-status-line))]
+    ;(when (< (count parsed) 5)
+    ;  (info "Missing lines?\n"
+    ;        raw))
+    parsed))
+
+(defn nodetool-status
+  "Like nodetool-status*, but enriches node maps with a :node field
+  corresponding to their Jepsen node."
+  [test]
+  (let [addresses->nodes (->> (:nodes test)
+                              (map (juxt dns-resolve identity))
+                              (into {}))]
+    (->> (nodetool-status*)
+         (map (fn [m]
+                (let [node (addresses->nodes (:address m))]
+                  (assert node)
+                  (assoc m :node node)))))))
+
+(defn log-nodetool-status
+  "Logs our merged view of nodetool status, for debugging purposes. Returns
+  status."
+  [status]
+  (->> status
+       (sort-by :node)
+       (map (fn [{:keys [node id state status]}]
+              (str node \t state \t status \t id)))
+       (str/join "\n")
+       (info "merged nodetool status:\n"))
+  status)
+
+(defn decommission-node!
+  "Decommissions a single node."
+  [test node]
+  (c/on-nodes test [node]
+              (fn [_ _]
+                (c/su
+                  (info "Decommissioning" node)
+                  (info "Nodetool decommission returned"
+                        (c/exec :nodetool :decommission))))))
+
+(def remove-timeout
+  "Seconds to wait for `nodetool remove` to return"
+  5)
+
+(defn remove-node!
+  "Removes a single node, using `via` to execute the remove command. Node is
+  represented as a map with :node and :id fields--`node` for Jepsen to identify
+  the node, `id` for Scylla."
+  [test via {:keys [node id]}]
+  (c/on-nodes test [via]
+              (fn [_ _]
+                (c/su
+                  (info "Asking" via "to remove" node (str "(" id ")"))
+                  (try+ (c/exec :timeout remove-timeout
+                                :nodetool :removenode id)
+                        (catch [:exit 124] e
+                          :timeout))))))
+
 (defn wait-for-recovery
   "Waits for the driver to report all nodes are up"
   [timeout-secs conn]
@@ -45,11 +149,6 @@
                        and
                        not)
              (Thread/sleep 500))))
-
-(defn dns-resolve
-  "Gets the address of a hostname"
-  [hostname]
-  (.getHostAddress (InetAddress/getByName (name hostname))))
 
 (defn live-nodes
   "Get the list of live nodes from a random node in the cluster"
@@ -77,11 +176,6 @@
                    (#(map (comp dns-resolve name) %)) set (set/difference @(:decommission test))
                    shuffle))))
 
-(defn nodetool
-  "Run a nodetool command"
-  [node & args]
-  (c/on node (apply c/exec (lit "nodetool") args)))
-
 (defn install-jdk8!
   "Scylla has a mandatory dep on jdk8, which isn't normally available in Debian
   Buster."
@@ -92,10 +186,6 @@
     (c/exec :wget :-qO :- "https://adoptopenjdk.jfrog.io/adoptopenjdk/api/gpg/key/public" | :apt-key :add :-)
     (debian/add-repo! "adoptopenjdk" "deb  [arch=amd64] https://adoptopenjdk.jfrog.io/adoptopenjdk/deb/ buster main")
     (debian/install [:adoptopenjdk-8-hotspot])))
-
-(def repo-file
-  "Where should we put Scylla's deb repo line?"
-  "/etc/apt/sources.list.d/scylla.list")
 
 (defn uninstall-scylla!
   "Removes Scylla packages--e.g. in preparation to install a different version.
@@ -246,16 +336,34 @@
   (configure-rsyslog!)
   (configure-scylla! node test))
 
-(defn guarded-start!
-  "Guarded start that only starts nodes that have joined the cluster already
-  through initial DB lifecycle or a bootstrap. It will not start decommissioned
-  nodes."
-  [node test db]
-  (let [bootstrap     (:bootstrap test)
-        decommission  (:decommission test)]
-    (when-not (or (contains? @bootstrap node)
-                  (->> node name dns-resolve (get decommission)))
-      (db/start! db test node))))
+(defn wipe!
+  "Kills Scylla and deletes local data files."
+  [db test node]
+  (db/kill! db test node)
+  (c/su
+    (info "deleting data files")
+    (meh (c/exec :rm :-rf
+                 ; We leave directories in place; Scylla gets confused
+                 ; without them.
+                 (lit "/var/lib/scylla/data/*")
+                 (lit "/var/lib/scylla/commitlog/*")
+                 (lit "/var/lib/scylla/hints/*")
+                 (lit "/var/lib/scylla/view_hints/*")))))
+
+(defn disable!
+  "Moves the scylla binary to a different location, preventing Scylla from
+  starting. We use this during membership changes to keep nodes removed from
+  the cluster, since they rejoin on restart."
+  []
+  (when (cu/exists? scylla-bin)
+    (c/exec :mv scylla-bin (str scylla-bin ".disabled"))))
+
+(defn enable!
+  "Undo disable!"
+  []
+  (let [disabled (str scylla-bin ".disabled")]
+    (when (cu/exists? disabled)
+      (c/exec :mv disabled scylla-bin))))
 
 (defn db
   "Sets up and tears down ScyllaDB"
@@ -270,30 +378,26 @@
         (when (:trace-cql test) (sc/start-tracing! test))
 
         (db/setup! tcpdump test node)
+        ; Just in case we were disabled last time.
+        (enable!)
+        ; Right, install
         (doto node
           (install! test)
           (configure! test))
+        ; And start
         (let [t1 (util/linear-time-nanos)]
-          (guarded-start! node test db)
+          (db/start! db test node)
           (sc/close! (sc/await-open test node))
           (info "Scylla startup complete in"
                 (float (util/nanos->secs (- (util/linear-time-nanos) t1)))
                 "seconds")))
 
       (teardown! [db test node]
-        (db/kill! db test node)
+        (wipe! db test node)
         (c/su
-          (info "deleting data files")
-          (meh (c/exec :rm :-rf
-                       ; We leave directories in place; Scylla gets confused
-                       ; without them.
-                       (lit "/var/lib/scylla/data/*")
-                       (lit "/var/lib/scylla/commitlog/*")
-                       (lit "/var/lib/scylla/hints/*")
-                       (lit "/var/lib/scylla/view_hints/*")
-                       "/var/log/scylla/scylla.log")))
+          (info "deleting log files")
+          (meh (c/exec :rm :-rf "/var/log/scylla/scylla.log")))
         (db/teardown! tcpdump test node)
-
         (when (:trace-cql test) (sc/stop-tracing! test)))
 
       db/LogFiles

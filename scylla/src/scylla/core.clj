@@ -10,6 +10,7 @@
             [jepsen
              [checker   :as checker]
              [cli       :as cli]
+             [client    :as client]
              [util      :as util :refer [meh timeout parse-long]]
              [control   :as c :refer [| lit]]
              [generator :as gen]
@@ -42,6 +43,11 @@
    :cmap            cmap/workload
    :list-append     list-append/workload
    :mv              mv/workload
+   :none            (fn [opts]
+                      {:generator (gen/delay (:time-limit opts)
+                                             nil)
+                       :client    client/noop
+                       :checker   (checker/unbridled-optimism)})
    :cset            cset/workload
    :wr-register     wr-register/workload
    :write-isolation write-isolation/workload
@@ -49,11 +55,11 @@
 
 (def standard-workloads
   "The workload names we run for test-all by default."
-  (keys workloads))
+  [:list-append :wr-register :cas-register])
 
 (def nemeses
   "Types of faults a nemesis can create."
-   #{:pause :kill :partition :clock})
+   #{:pause :kill :partition :clock :membership})
 
 (def standard-nemeses
   "Combinations of nemeses for tests"
@@ -61,13 +67,13 @@
    [:pause]
    [:kill]
    [:partition]
-   [:pause :kill :partition :clock]])
+   [:membership]
+   [:pause :kill :partition :clock :membership]])
 
 (def special-nemeses
   "A map of special nemesis names to collections of faults"
   {:none      []
-   :standard  [:pause :kill :partition :clock]
-   :all       [:pause :kill :partition :clock]})
+   :all       [:pause :kill :partition :clock :membership]})
 
 (defn parse-nemesis-spec
   "Takes a comma-separated nemesis string and returns a collection of keyword
@@ -122,6 +128,16 @@
 ; *work*, but we should figure out what replayer does and maybe make a nemesis
 ; for it.
 
+(def logging-overrides
+  "Configures per-logger logging levels"
+  {"com.datastax.driver.core.Connection"   :error
+   "com.datastax.driver.core.ClockFactory" :error
+   "com.datastax.driver.core.Session"      :error
+   "com.datastax.driver.core.ControlConnection" :off
+   "com.datastax.driver.core.Cluster"      :warn
+   "com.datastax.driver.core.policies.RoundRobinPolicy" :error
+   })
+
 (defn scylla-test
   "Takes test options from the CLI, all-tests, etc, and constructs a Jepsen
   test map."
@@ -167,13 +183,7 @@
             :os           debian/os
             :db           db
             :nemesis      (:nemesis nemesis)
-            :logging      {:overrides
-                           {"com.datastax.driver.core.Connection"   :error
-                            "com.datastax.driver.core.ClockFactory" :error
-                            "com.datastax.driver.core.Session"      :error
-                            "com.datastax.driver.core.ControlConnection" :off
-                            "com.datastax.driver.core.Cluster"      :warn
-                            }}
+            :logging      {:overrides logging-overrides}
             :bootstrap    (atom #{}) ; TODO: remove me
             :decommission (atom #{}) ; TODO: remove me
             :nonserializable-keys [:conductors] ; TODO: remove me
