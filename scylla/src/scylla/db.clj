@@ -39,6 +39,19 @@
   [hostname]
   (.getHostAddress (InetAddress/getByName (name hostname))))
 
+(defn nodetool-status-ignorable-line?
+  "Can we ignore this line from nodetool status?"
+  [line]
+  (condp re-find line
+    #"^Datacenter:"     true
+    #"^=========="      true
+    #"^Status=Up/Down"  true ; header
+    #"^\|/ State"       true ; header
+    #"--\s+Address"     true ; header
+    #"^\s*$"            true
+    #"^Note: "          true
+    false))
+
 (defn parse-nodetool-status-line
   "Takes a line from `nodetool status` and returns it as a map. The format of
   nodetool status is:
@@ -51,11 +64,13 @@
   which we parse to something like {:status :up, :state :normal, :address ...}"
   [line]
   (when-let [[match status state address load tokens owns id rack]
-             (re-find #"^([UD])([NLJM])\s+(.+?)\s+(\?|.+? \wB)\s+(\d+)\s+(.+?)\s+(.+?)\s+(.+?)$" line)]
+             (re-find #"^([UD\?])([NLJM\?])\s+(.+?)\s+(\?|.+? bytes|.+? \wB)\s+(\d+)\s+(.+?)\s+(.+?)\s+(.+?)$" line)]
     (let [status (case status
+                   "?" :unknown
                    "U" :up
                    "D" :down)
           state (case state
+                  "?" :unknown
                   "N" :normal
                   "L" :leaving
                   "J" :joining
@@ -73,12 +88,15 @@
   as a sequence of parsed maps."
   []
   (let [raw    (c/su (c/exec :nodetool :status))
-        parsed (->> raw
+        salient (->> raw
                     str/split-lines
-                    (keep parse-nodetool-status-line))]
-    ;(when (< (count parsed) 5)
-    ;  (info "Missing lines?\n"
-    ;        raw))
+                    (remove nodetool-status-ignorable-line?))
+        parsed (->> salient
+                    (map parse-nodetool-status-line))]
+    (when (some nil? parsed)
+      (throw+ {:type     :nodetool-status-parse-error
+               :unparsed (remove parse-nodetool-status-line salient)
+               :raw      raw}))
     parsed))
 
 (defn nodetool-status
@@ -131,6 +149,18 @@
                   (info "Asking" via "to remove" node (str "(" id ")"))
                   (try+ (c/exec :timeout remove-timeout
                                 :nodetool :removenode id)
+                        (catch [:exit 124] e
+                          :timeout))))))
+
+(defn decommission-node!
+  "Decommissions (politely removes) a single node."
+  [test node]
+  (c/on-nodes test [node]
+              (fn [_ _]
+                (c/su
+                  (info "Decommissioning" node)
+                  (try+ (c/exec :timeout remove-timeout
+                                :nodetool :decommission)
                         (catch [:exit 124] e
                           :timeout))))))
 

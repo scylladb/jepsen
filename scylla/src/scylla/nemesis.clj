@@ -130,18 +130,16 @@
 
 (defn removed-or-free-nodes
   "Returns the set of nodes which are known to be free or are in the process of
-  being removed."
+  being removed or decommissioned."
   [state]
   (into (:free state)
         (->> (:pending state)
              (map first)
-             (filter (comp #{:remove-node} :f))
+             (filter (comp #{:remove-node :decommission-node} :f))
              (map (comp :node :node :value)))))
 
 (defn remove-op
-  "Generates a remove node op for a membership state, if possible. We need a
-  node to be down before we can remove it, so we look for nodes flagged as down
-  from *somewhere*."
+  "Generates a remove node op for a membership state, if possible."
   [state]
   ;(info "state" (pprint-str state))
   ;(info "nv" (pprint-str (:node-views state)))
@@ -165,18 +163,55 @@
                       :node (select-keys node [:node :id])})))]
     {:type :info, :f :remove-node, :value v}))
 
+(defn decommission-op
+  "Generates a decommission node op for a membership state, if possible."
+  [state]
+  (rand-nth-empty
+    (for [[via node-view] (:node-views state)
+          node            node-view]
+      (when
+        (and ; We need a node's view of itself...
+             (= via (:node node))
+             ; And where the node thinks it's online
+             (up? node)
+             ; And the node can't be free...
+             (not (contains? (:free state) via))
+             ; And where there aren't too many nodes freed or
+             ; removed.
+             (< (count (removed-or-free-nodes state))
+                max-removed-nodes))
+        {:type :info, :f :decommission-node, :value via}))))
+
 (defn wipe-op
   "Generates a wipe op for a membership state, if possible. We can issue a wipe
-  for any node which has a :remove operation pending."
+  for any node which has a remove or decommission op pending. The idea is that
+  sometimes this will be politely sequenced after the remove/decom, and other
+  times, we'll nuke a node while it's only partway removed, but we'll generally
+  avoid nuking healthy nodes."
   [state]
-  ;(info :want-to-wipe
-  ;      (pprint-str (:pending state)))
-  (->> (:pending state)
-       (map first)
-       (filter (comp #{:remove-node} :f))
-       (map (fn [op]
-              {:type :info, :f :wipe-node, :value (:node (:node (:value op)))}))
-       rand-nth-empty))
+  (let [pending (map first (:pending state))
+        nodes (concat (->> pending
+                           (filter (comp #{:remove-node} :f))
+                           (map (comp :node :node :value)))
+                      (->> pending
+                           (filter (comp #{:decommission-node} :f))
+                           (map :value)))]
+    (when-let [node (rand-nth-empty nodes)]
+      {:type :info, :f :wipe-node, :value node})))
+
+(defmacro with-nodetool-errors
+  "Evals body, converting nodetool errors to values like :conn-refused."
+  [& body]
+  `(try+ ~@body
+         (catch [:type :jepsen.control/nonzero-exit] e#
+           (condp re-find (:out e#)
+             #"Connection refused"         :conn-refused
+             #"alive and owns this ID"     :node-considered-alive
+             #"removenode is in progress"  :remove-in-progress
+             #"Host ID not found"          :host-id-not-found
+             #"failed to repair \d+ sub ranges" [:failed-to-repair-sub-ranges
+                                                 (:out e#)]
+             (throw+ e#)))))
 
 ; `free` is a set of nodes we've removed from the cluster and destroyed data
 ; on.
@@ -218,7 +253,10 @@
     ; (info :gen-op (str "state\n" (pprint-str this)))
     ; TODO: generate nodetool cleanups?
     (or (->> [(add-op this)
+              (add-op this)
               (remove-op this)
+              (decommission-op this)
+              (wipe-op this)
               (wipe-op this)]
              (remove nil?)
              rand-nth-empty)
@@ -238,29 +276,23 @@
         :pass :passed
 
         :add-node
-        (assoc op :value
-               (c/on-nodes test [value]
-                           (fn [test node]
-                             (sdb/enable!)
-                             (db/start! db test node))))
+        (c/on-nodes test [value]
+                    (fn [test node]
+                      (sdb/enable!)
+                      (db/start! db test node)))
 
         :remove-node
-        (try+ (sdb/remove-node!
-                test (:via value) (:node value))
-              (catch [:type :jepsen.control/nonzero-exit] e
-                (condp re-find (:out e)
-                  #"Connection refused"         :conn-refused
-                  #"alive and owns this ID"     :node-considered-alive
-                  #"removenode is in progress"  :remove-in-progress
-                  #"Host ID not found"          :host-id-not-found
-                  (throw+ e))))
+        (with-nodetool-errors
+          (sdb/remove-node! test (:via value) (:node value)))
+
+        :decommission-node
+        (with-nodetool-errors (sdb/decommission-node! test value))
 
         :wipe-node
-        (assoc op :value
-               (c/on-nodes test [value]
-                           (fn [test node]
-                             (sdb/wipe! db test node)
-                             (sdb/disable!)))))))
+        (c/on-nodes test [value]
+                    (fn [test node]
+                      (sdb/wipe! db test node)
+                      (sdb/disable!))))))
 
   (resolve [this test]
     this)
@@ -285,6 +317,16 @@
                 (free (:node (:node (:value op)))))
         this)
 
+      ; We're done decommissioning a node once it's free, or if we know the
+      ; remove definitely failed.
+      :decommission-node
+      (when (or (#{:conn-refused
+                   :host-id-not-found
+                   :node-considered-alive}
+                  (:value op'))
+                (free (:value op)))
+        this)
+
       ; Once wiped, we can mark this node as free.
       :wipe-node
       (update this :free conj (:value op)))))
@@ -292,21 +334,20 @@
 (defn membership-package
   "Constructs a membership nemesis package if (:faults opts) includes :members"
   [opts]
-  (let [pkg (membership/package
-              (assoc opts :membership {:state (map->MembershipState
-                                                {:db   (:db opts)
-                                                 :free #{}})
-                                       :log-resolve-op? false
-                                       :log-resolve?    true
-                                       :log-node-views? false
-                                       :log-view?       false}))]
+  (when-let [pkg (membership/package
+                   (assoc opts :membership {:state (map->MembershipState
+                                                     {:db   (:db opts)
+                                                      :free #{}})
+                                            :log-resolve-op? false
+                                            :log-resolve?    true
+                                            :log-node-views? false
+                                            :log-view?       false}))]
     ; At the end of the test, re-add everyone.
     (assoc pkg :final-generator
            (fn [test ctx]
              (map (fn [node]
                     {:type :info, :f :add, :value node})
                   (:nodes test))))))
-
 
 (defn package
   "Constructs a {:nemesis, :generator, :final-generator} map for the test.
