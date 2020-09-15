@@ -80,9 +80,10 @@
   (gen/map (fn [op] (update op :time max t)) gen))
 
 (defn after-times
-  "All ops from gen at dt seconds, then 2dt seconds, then 3dt seconds, etc."
-  [dt gen]
-  (->> (iterate (partial + dt) dt)
+  "All ops from gen at start seconds, then start + dt seconds, then start + 2dt
+  seconds, etc."
+  [start dt gen]
+  (->> (iterate (partial + dt) start)
        (map util/secs->nanos)
        (map (partial after-time gen))))
 
@@ -94,10 +95,11 @@
         fg (:final-generator pkg)]
     (assoc pkg :generator
            (ordered-any
-             [(after-times 60 [(gen/log "Recovering...")
-                               fg
-                               (gen/sleep 600)
-                               (gen/log "Recovery done, back to mischief")])]
+             (after-times 60 60
+                          [(gen/log "Recovering...")
+                           fg
+                           (gen/sleep 20)
+                           (gen/log "Recovery done, back to mischief")])
              g))))
 
 (defn up?
@@ -376,10 +378,11 @@
       ; At the end of the test, re-add everyone.
       (assoc pkg
              :final-generator
-             (fn [test ctx]
-               (map (fn [node]
-                      {:type :info, :f :add, :value node})
-                    (:nodes test)))
+             (fn final-gen [test ctx]
+               (info :nemesis (-> pkg :nemesis))
+               (when-let [node (->> pkg :nemesis :state deref
+                                    removed-or-free-nodes first)]
+                 {:type :info, :f :add-node, :value node}))
              :perf #{{:name "membership"
                       :fs   #{:add-node
                               :repair-node
@@ -401,7 +404,8 @@
         pkg (->> (nc/nemesis-packages opts)
                  (concat [membership])
                  (remove nil?)
-                 nc/compose-packages)]
+                 nc/compose-packages
+                 periodically-recover)]
     ; Just for testing membership generator behavior--we create a partition to
     ; get things started, then let it remove/wipe, then rejoin.
     ;(assoc pkg :generator
@@ -412,5 +416,6 @@
     ;        (gen/limit 5 (:generator membership))
     ;        (gen/once {:type :info, :f :stop-partition})
     ;        (:generator membership)])
+
     pkg
     ))
