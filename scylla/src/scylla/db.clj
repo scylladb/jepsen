@@ -143,38 +143,44 @@
   represented as a map with :node and :id fields--`node` for Jepsen to identify
   the node, `id` for Scylla."
   [test via {:keys [node id]}]
-  (c/on-nodes test [via]
+  [:removed node
+   (get (c/on-nodes test [via]
               (fn [_ _]
                 (c/su
                   (info "Asking" via "to remove" node (str "(" id ")"))
                   (try+ (c/exec :timeout remove-timeout
                                 :nodetool :removenode id)
                         (catch [:exit 124] e
-                          :timeout))))))
+                          :timeout)))))
+        via)])
 
 (defn decommission-node!
   "Decommissions (politely removes) a single node."
   [test node]
-  (c/on-nodes test [node]
-              (fn [_ _]
-                (c/su
-                  (info "Decommissioning" node)
-                  (try+ (c/exec :timeout remove-timeout
-                                :nodetool :decommission)
-                        (catch [:exit 124] e
-                          :timeout))))))
+  [:decommissioned node
+   (get (c/on-nodes test [node]
+                  (fn [_ _]
+                    (c/su
+                      (info "Decommissioning" node)
+                      (try+ (c/exec :timeout remove-timeout
+                                    :nodetool :decommission)
+                            (catch [:exit 124] e
+                              :timeout)))))
+        node)])
 
 (defn repair-node!
   "Issues a nodetool repair on a single node."
   [test node]
-  (c/on-nodes test [node]
-              (fn [_ _]
-                (c/su
-                  (info "Repairing" node)
-                  (try+ (c/exec :timeout remove-timeout
-                                :nodetool :repair)
-                        (catch [:exit 124] e
-                          :timeout))))))
+  [:repaired node
+   (get (c/on-nodes test [node]
+                  (fn [_ _]
+                    (c/su
+                      (info "Repairing" node)
+                      (try+ (c/exec :timeout remove-timeout
+                                    :nodetool :repair)
+                            (catch [:exit 124] e
+                              :timeout)))))
+        node)])
 
 (defn wait-for-recovery
   "Waits for the driver to report all nodes are up"

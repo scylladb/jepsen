@@ -292,10 +292,11 @@
         :pass :passed
 
         :add-node
-        (c/on-nodes test [value]
-                    (fn [test node]
-                      (sdb/enable!)
-                      (db/start! db test node)))
+        (do (c/on-nodes test [value]
+                        (fn [test node]
+                          (sdb/enable!)
+                          (db/start! db test node)))
+            [:added value])
 
         :remove-node
         (with-nodetool-errors
@@ -305,10 +306,12 @@
         (with-nodetool-errors (sdb/decommission-node! test value))
 
         :wipe-node
-        (c/on-nodes test [value]
-                    (fn [test node]
-                      (sdb/wipe! db test node)
-                      (sdb/disable!)))
+        (do (c/on-nodes test [value]
+                        (fn [test node]
+                          (sdb/wipe! db test node)
+                          (sdb/disable!)))
+            [:wiped value])
+
 
         :repair-node
         (with-nodetool-errors (sdb/repair-node! test value)))))
@@ -371,11 +374,18 @@
                                            :log-view?       false})
                        membership/package)]
       ; At the end of the test, re-add everyone.
-      (assoc pkg :final-generator
+      (assoc pkg
+             :final-generator
              (fn [test ctx]
                (map (fn [node]
                       {:type :info, :f :add, :value node})
-                    (:nodes test)))))))
+                    (:nodes test)))
+             :perf #{{:name "membership"
+                      :fs   #{:add-node
+                              :repair-node
+                              :decommission-node
+                              :remove-node}
+                      :color "#278B66"}}))))
 
 (defn package
   "Constructs a {:nemesis, :generator, :final-generator} map for the test.
