@@ -405,7 +405,8 @@
                  (concat [membership])
                  (remove nil?)
                  nc/compose-packages
-                 periodically-recover)]
+                 ;periodically-recover
+                 )]
     ; Just for testing membership generator behavior--we create a partition to
     ; get things started, then let it remove/wipe, then rejoin.
     ;(assoc pkg :generator
