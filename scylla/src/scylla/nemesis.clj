@@ -2,6 +2,7 @@
   "All kinds of failure modes for Scylla!"
   (:require [clojure.pprint :refer [pprint]]
             [clojure.tools.logging :refer [info warn]]
+            [clojure.set :as set]
             [scylla [client :as client]
                     [db :as sdb]]
             [slingshot.slingshot :refer [try+ throw+]]
@@ -132,11 +133,34 @@
   "Returns the set of nodes which are known to be free or are in the process of
   being removed or decommissioned."
   [state]
-  (into (:free state)
-        (->> (:pending state)
-             (map first)
-             (filter (comp #{:remove-node :decommission-node} :f))
-             (map (comp :node :node :value)))))
+  (clojure.set/union (:free state)
+                     (->> (:pending state)
+                          (map first)
+                          (filter (comp #{:remove-node} :f))
+                          (map (comp :node :node :value))
+                          set)
+                     (->> (:pending state)
+                          (map first)
+                          (filter (comp #{:decommission-node} :f))
+                          (map :value)
+                          set)))
+
+(defn up-nodes
+  "Takes a state, and yields a collection of nodes which are part of the
+  cluster, and think they're up."
+  [state]
+  (for [[via node-view] (:node-views state)
+        node            node-view
+        :when (and (= via (:node node))
+                   (up? node)
+                   (not (contains? (:free state) via)))]
+    via))
+
+(defn repair-op
+  "Generates a repair op for a membership state, if possible."
+  [state]
+  (when-let [n (rand-nth-empty (up-nodes state))]
+    {:type :info, :f :repair-node, :value n}))
 
 (defn remove-op
   "Generates a remove node op for a membership state, if possible."
@@ -166,21 +190,13 @@
 (defn decommission-op
   "Generates a decommission node op for a membership state, if possible."
   [state]
-  (rand-nth-empty
-    (for [[via node-view] (:node-views state)
-          node            node-view]
-      (when
-        (and ; We need a node's view of itself...
-             (= via (:node node))
-             ; And where the node thinks it's online
-             (up? node)
-             ; And the node can't be free...
-             (not (contains? (:free state) via))
-             ; And where there aren't too many nodes freed or
-             ; removed.
-             (< (count (removed-or-free-nodes state))
-                max-removed-nodes))
-        {:type :info, :f :decommission-node, :value via}))))
+  ; Don't remove too many nodes
+  (when (< (count (removed-or-free-nodes state))
+           max-removed-nodes)
+    (when-let [n (rand-nth-empty (up-nodes state))]
+      {:type  :info
+       :f     :decommission-node
+       :value n})))
 
 (defn wipe-op
   "Generates a wipe op for a membership state, if possible. We can issue a wipe
@@ -211,11 +227,12 @@
              #"Host ID not found"          :host-id-not-found
              #"failed to repair \d+ sub ranges" [:failed-to-repair-sub-ranges
                                                  (:out e#)]
+             #"Repair job has failed"      :repair-failed
              (throw+ e#)))))
 
 ; `free` is a set of nodes we've removed from the cluster and destroyed data
 ; on.
-(defrecord MembershipState [db node-views view pending free]
+(defrecord MembershipState [db node-views view pending free faults]
   membership/State
   (node-view [this test node]
     ; TODO: something is weird here. I think nodetool status might only return
@@ -247,17 +264,16 @@
          (sort-by :node)))
 
   (fs [this]
-    #{:add-node :remove-node :decommission-node :wipe-node :pass})
+    #{:add-node :remove-node :decommission-node :wipe-node
+      :repair-node :pass})
 
   (op [this test]
-    ; (info :gen-op (str "state\n" (pprint-str this)))
-    ; TODO: generate nodetool cleanups?
-    (or (->> [(add-op this)
-              (add-op this)
-              (remove-op this)
-              (decommission-op this)
-              (wipe-op this)
-              (wipe-op this)]
+    (or (->> (concat (when (faults :remove)
+                       [(remove-op this) (wipe-op this) (add-op this)])
+                     (when (faults :decommission)
+                       [(decommission-op this) (wipe-op this) (add-op this)])
+                     (when (faults :repair)
+                       [(repair-op this)]))
              (remove nil?)
              rand-nth-empty)
         ; Well this is awkward. We're wrapped in a gen/mix along with the
@@ -292,7 +308,10 @@
         (c/on-nodes test [value]
                     (fn [test node]
                       (sdb/wipe! db test node)
-                      (sdb/disable!))))))
+                      (sdb/disable!)))
+
+        :repair-node
+        (with-nodetool-errors (sdb/repair-node! test value)))))
 
   (resolve [this test]
     this)
@@ -329,25 +348,34 @@
 
       ; Once wiped, we can mark this node as free.
       :wipe-node
-      (update this :free conj (:value op)))))
+      (update this :free conj (:value op))
+
+      ; Repairs are immediately resolved.
+      :repair-node
+      this)))
 
 (defn membership-package
   "Constructs a membership nemesis package if (:faults opts) includes :members"
   [opts]
-  (when-let [pkg (membership/package
-                   (assoc opts :membership {:state (map->MembershipState
-                                                     {:db   (:db opts)
-                                                      :free #{}})
-                                            :log-resolve-op? false
-                                            :log-resolve?    true
-                                            :log-node-views? false
-                                            :log-view?       false}))]
-    ; At the end of the test, re-add everyone.
-    (assoc pkg :final-generator
-           (fn [test ctx]
-             (map (fn [node]
-                    {:type :info, :f :add, :value node})
-                  (:nodes test))))))
+  (let [opts (if (some #{:remove :decommission :repair} (:faults opts))
+               (update opts :faults conj :membership)
+               opts)]
+    (when-let [pkg (-> opts
+                       (assoc :membership {:state (map->MembershipState
+                                                    {:db   (:db opts)
+                                                     :free #{}
+                                                     :faults (:faults opts)})
+                                           :log-resolve-op? false
+                                           :log-resolve?    true
+                                           :log-node-views? false
+                                           :log-view?       false})
+                       membership/package)]
+      ; At the end of the test, re-add everyone.
+      (assoc pkg :final-generator
+             (fn [test ctx]
+               (map (fn [node]
+                      {:type :info, :f :add, :value node})
+                    (:nodes test)))))))
 
 (defn package
   "Constructs a {:nemesis, :generator, :final-generator} map for the test.

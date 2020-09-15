@@ -164,6 +164,18 @@
                         (catch [:exit 124] e
                           :timeout))))))
 
+(defn repair-node!
+  "Issues a nodetool repair on a single node."
+  [test node]
+  (c/on-nodes test [node]
+              (fn [_ _]
+                (c/su
+                  (info "Repairing" node)
+                  (try+ (c/exec :timeout remove-timeout
+                                :nodetool :repair)
+                        (catch [:exit 124] e
+                          :timeout))))))
+
 (defn wait-for-recovery
   "Waits for the driver to report all nodes are up"
   [timeout-secs conn]

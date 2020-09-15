@@ -59,7 +59,7 @@
 
 (def nemeses
   "Types of faults a nemesis can create."
-   #{:pause :kill :partition :clock :membership})
+   #{:pause :kill :partition :clock :decommission :remove :repair})
 
 (def standard-nemeses
   "Combinations of nemeses for tests"
@@ -72,8 +72,9 @@
 
 (def special-nemeses
   "A map of special nemesis names to collections of faults"
-  {:none      []
-   :all       [:pause :kill :partition :clock :membership]})
+  {:none       []
+   :membership [:decommission :remove :repair]
+   :all        [:pause :kill :partition :clock :membership]})
 
 (defn parse-nemesis-spec
   "Takes a comma-separated nemesis string and returns a collection of keyword
