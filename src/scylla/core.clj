@@ -55,7 +55,14 @@
 
 (def standard-workloads
   "The workload names we run for test-all by default."
-  [:list-append :wr-register :cas-register])
+  [:cas-register
+   :counter
+   :cmap
+   :cset
+   :mv
+   :write-isolation
+   :list-append
+   :wr-register])
 
 (def nemeses
   "Types of faults a nemesis can create."
@@ -266,6 +273,11 @@
     "What *serial* consistency level should we set for reads? The C* Java driver docs say this is ignored, but it might actually be used in Scylla?"
     :parse-fn keyword
     :validate [consistency-levels (cli/one-of consistency-levels)]]
+
+   [nil "--retry POLICY" "What kind of retry policy should we have the client use?"
+    :default :default
+    :parse-fn keyword
+    :validate [#{:default :never} "Should be either default or never."]]
 
    [nil "--table-count NUM" "How many tables should we spread operations across?"
     :default 1

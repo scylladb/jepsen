@@ -80,6 +80,27 @@
           (:fuzz-timestamps test)     fuzz-timestamps
           (:quantize-timestamps test) quantize-timestamps))
 
+(defn never-retry
+  "A RetryPolicy which always rethrows. Helpful in distinguishing between
+  client-side and server-side retry issues."
+  []
+  (reify RetryPolicy
+    (onReadTimeout [_ statement consistency required-responses received-responses data-retrieved? nb-retry]
+      (RetryPolicy$RetryDecision/rethrow))
+
+    (onUnavailable [_ statement consistency required-replica alive-replica nb-retry]
+      (RetryPolicy$RetryDecision/rethrow))
+
+    (onWriteTimeout [_ statement consistency write-type required-acks received-acks nb-retry]
+      (RetryPolicy$RetryDecision/rethrow))
+
+    (onRequestError [_ statement consistency exception nb-retry]
+      (RetryPolicy$RetryDecision/rethrow))
+
+    (init [_ cluster])
+
+    (close [_])))
+
 (defn open
   "Returns an map of :cluster :session bound to the given node."
   [test node]
@@ -104,6 +125,11 @@
               ; come back
               :reconnection-policy {:type              :constant
                                     :constant-delay-ms 1000}
+              ; I suspect the default retry policy might actually lead to
+              ; aborted reads.
+              :retry-policy (case (:retry test)
+                              :default :default
+                              :never   (never-retry))
               :timestamp-generator (timestamp-generator test)}
         cluster (alia/cluster opts)]
     (try (let [session (alia/connect cluster)]
