@@ -1,5 +1,5 @@
 (ns scylla.write-isolation
-  "This is a variant workload designed to verify a pair of Scylla claims from
+  "This is a pair of workloads designed to verify a pair of Scylla claims from
   https://docs.scylladb.com/getting-started/dml
 
   > All updates for an INSERT are applied atomically and in isolation.
@@ -7,9 +7,14 @@
   > In an UPDATE statement, all updates within the same partition key are
   > applied atomically and in isolation.
 
-  To check this, we constrain our generator such that every update is a batch
+  > All updates in a BATCH belonging to a given partition key are performed in isolation.
+
+  To check this, we constrain our generator such that every update is an
   update to the same set of keys; each update picks exactly one value. Since
-  updates are applied in isolation, we should never observe a mixed state."
+  updates are applied in isolation, we should never observe a mixed state.
+
+  We have two variants of this workload: one where keys are cells in a single
+  row, and one where keys are rows, updated via BATCH."
   (:require [clojure.string :as str]
             [clojure.tools.logging :refer [info]]
             [jepsen [client :as client]
@@ -87,6 +92,11 @@
   {:client    (wr-register/->Client nil)
    :generator (generator)
    :checker   (checker)})
+
+(defn single-row-workload
+  "This variant of the test uses a single row to store values."
+  [opts]
+  (assoc (workload opts) :client (wr-register/->SingleRowClient nil)))
 
 (defn single-write-generator
   "We generate a write for a single key range, and interleave it with several

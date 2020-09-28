@@ -50,7 +50,8 @@
                        :checker   (checker/unbridled-optimism)})
    :cset            cset/workload
    :wr-register     wr-register/workload
-   :write-isolation write-isolation/workload
+   :write-isolation              write-isolation/workload
+   :write-isolation-single-row   write-isolation/single-row-workload
    :write-isolation-single-write write-isolation/single-write-workload})
 
 (def standard-workloads

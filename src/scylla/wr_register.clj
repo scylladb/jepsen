@@ -192,6 +192,78 @@
   client/Reusable
   (reusable? [_ _] true))
 
+; This version of the client stores every key in a single row's CQL map, and
+; does *not* use transactional updates. TODO: make this usable either with or
+; without transactional writes, and extract into a shared namespace where this
+; test (which should use txns) and the write-isolation test (which shouldn't
+; use txns) can share it.
+(defrecord SingleRowClient [conn]
+  client/Client
+  (open! [this test node]
+    (assoc this :conn (c/open test node)))
+
+  (setup! [_ test]
+    (let [s (:session conn)]
+      (c/retry-each
+        (a/execute s (h/create-keyspace
+                       :jepsen_keyspace
+                       (h/if-exists false)
+                       (h/with {:replication {:class :SimpleStrategy
+                                              :replication_factor 3}})))
+        (a/execute s (h/use-keyspace :jepsen_keyspace))
+        (a/execute s (h/create-table
+                       :maps
+                       (h/if-exists false)
+                       (h/column-definitions {:id           :int
+                                              ; We can't do LWT without SOME
+                                              ; kind of IF statement (why?),
+                                              ; so we leave a trivial null
+                                              ; column here.
+                                              :lwt_trivial  :int
+                                              :value        (h/map-type
+                                                              :int :int)
+                                              :primary-key  :id})
+                       (h/with {:compaction {:class (:compaction-strategy test)}}))))))
+
+  (invoke! [_ test op]
+    (let [s (:session conn)
+          txn (:value op)]
+      (c/with-errors op #{}
+        (a/execute s (h/use-keyspace :jepsen_keyspace))
+        (cond (read-only? txn)
+              (let [res (->> (a/execute s (h/select :maps
+                                                    (h/where [[= :id 0]]))
+                                        (c/read-opts test))
+                             first
+                             :value)
+                    ; Bind that map of keys to values back into the txn
+                    txn' (mapv (fn [[f k v]]
+                                 [f k (get res k)])
+                               txn)]
+                (assoc op :type :ok, :value txn'))
+
+              (write-only? txn)
+              ; Compute a map of keys to final values resulting from each write
+              (let [effects (->> txn
+                                 (map (comp vec rest))
+                                 (into {}))]
+                (a/execute s (h/update
+                               :maps
+                               (h/where [[= :id 0]])
+                               (h/set-columns {:value [+ effects]}))
+                           (c/write-opts test))
+                (assoc op :type :ok))
+
+              true (assert false "can't run mixed read/write txns")))))
+
+  (teardown! [_ test])
+
+  (close! [_ test]
+    (c/close! conn))
+
+  client/Reusable
+  (reusable? [_ _] true))
+
 (defn generator
   "This is sort of silly, but... we want to test a mix of single-key and
   multi-key txns. However, Scylla imposes a bunch of restrictions on those

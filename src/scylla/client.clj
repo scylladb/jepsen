@@ -388,7 +388,7 @@
   intercepting calls to alia/execute and journaling them to a trace file. Not
   thread-safe; redefines alia/execute globally!"
   [test]
-  (set! *trace-writer* (io/writer (store/path! test "trace.cql")))
+  (.bindRoot ^Var #'*trace-writer* (io/writer (store/path! test "trace.cql")))
   (.bindRoot ^Var #'alia/execute traced-execute))
 
 (defn stop-tracing!
@@ -396,5 +396,5 @@
   [test]
   (when-let [w *trace-writer*]
     (.close *trace-writer*)
-    (set! *trace-writer* nil))
+    (.bindRoot ^Var #'*trace-writer* nil))
   (.bindRoot ^Var #'alia/execute original-alia-execute))
