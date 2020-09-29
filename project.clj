@@ -1,4 +1,4 @@
-(defproject scylla "0.1.0-SNAPSHOT"
+(defproject scylla "0.1.0"
   :description "Jepsen testing for Scylla"
   :url "http://github.com/scylladb/jepsen"
   :license {:name "Eclipse Public License"
