@@ -322,10 +322,21 @@
   (install-scylla-from-apt! test)
   (install-local-files! test))
 
-(defn seeds
-  "Returns a comma-separated string of seed nodes to join to."
+(defn bootstrap-seeds
+  "Returns a comma-separated string of seed nodes for boostrap.
+  Return all nodes to speed up bootstrap."
   [test]
   (->> (:nodes test)
+       (map dns-resolve)
+       (str/join ",")))
+
+(defn join-seeds
+  "Returns a comma-separated string of seed nodes to join to.
+   Is used when adding a node to a non-empty cluster. We must
+   exclude the node being added from the list of seeds to ensure
+   the new node is streamed to before it begins serving reads and writes."
+  [test node]
+  (->> (disj (into #{} (:nodes test)) node)
        (map dns-resolve)
        (str/join ",")))
 
@@ -357,25 +368,36 @@
             :> "/etc/rsyslog.d/10-scylla.conf")
     (c/exec :service :rsyslog :restart)))
 
-(defn configure-scylla!
-  "Sets up Scylla config files"
-  [node test]
-  (info "configuring ScyllaDB")
+(defn configure-scylla-server!
+  "Sets up default/scylla-server"
+  [test]
   (c/su
     (c/exec :echo
             (-> (io/resource "default/scylla-server")
                 slurp
                 (str/replace "$EXTRA_SCYLLA_ARGS" (extra-scylla-args test)))
-            :> "/etc/default/scylla-server")
+            :> "/etc/default/scylla-server")))
+
+(defn configure-scylla-yaml!
+  "Sets up Scylla scylla.yaml"
+  [test node seeds]
+  (c/su
     (c/exec :echo
             (-> (io/resource "scylla.yaml")
                 slurp
-                (str/replace "$SEEDS"           (seeds test))
+                (str/replace "$SEEDS"           seeds)
                 (str/replace "$LISTEN_ADDRESS"  (dns-resolve node))
                 (str/replace "$RPC_ADDRESS"     (dns-resolve node))
                 (str/replace "$HINTED_HANDOFF"  (str (boolean (:hinted-handoff test))))
                 (str/replace "$PHI_LEVEL"       (str (:phi-level test))))
             :> "/etc/scylla/scylla.yaml")))
+
+(defn configure-scylla!
+  "Sets up Scylla config files"
+  [node test]
+  (info "configuring ScyllaDB")
+  (configure-scylla-server! test)
+  (configure-scylla-yaml! test node (bootstrap-seeds test)))
 
 (defn configure!
   "Uploads configuration files to the current node."
@@ -435,6 +457,9 @@
         ; And start
         (let [t1 (util/linear-time-nanos)]
           (db/start! db test node)
+          ; Once bootstrapped, update scylla.yaml with correct
+          ; configuration for a non-empty cluster.
+          (configure-scylla-yaml! test node (join-seeds test node))
           (sc/close! (sc/await-open test node))
           (info "Scylla startup complete in"
                 (float (util/nanos->secs (- (util/linear-time-nanos) t1)))
