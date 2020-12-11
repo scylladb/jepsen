@@ -297,22 +297,25 @@
   scylla-server package to replace any previous changes."
   [test]
   (c/su
-    ; Potentially install a local override
-    (let [deb (:local-deb test)
-          bin (:local-scylla-bin test)]
-      (cond bin (do (info "Replacing" scylla-bin "with local file" bin)
-                    (c/upload bin scylla-bin))
+    ; Try to work around a concurrency bug in jsch
+    (locking install-local-files!
+      ; Potentially install a local override
+      (let [deb (:local-deb test)
+            bin (:local-scylla-bin test)]
+        (cond bin (do (info "Replacing" scylla-bin "with local file" bin)
+                      (c/upload bin scylla-bin))
 
-            deb (do (info "Installing local" deb "on top of existing Scylla")
-                    (let [tmp  (cu/tmp-dir!)
-                          file (str tmp "/scylla.deb")]
-                      (try (c/upload deb file)
-                           (c/exec :dpkg :-i file)
-                           (finally
-                             (c/exec :rm :-rf tmp)))))
-            :else (do ; If we're NOT replacing, we need to reinstall to
-                      ; override any *previously* installed bin
-                      (c/exec :apt-get :install :--reinstall :scylla-server))))))
+              deb (do (info "Installing local" deb "on top of existing Scylla")
+                      (let [tmp  (cu/tmp-dir!)
+                            file (str tmp "/scylla.deb")]
+                        (try (c/upload deb file)
+                             (c/exec :dpkg :-i file)
+                             (finally
+                               (c/exec :rm :-rf tmp)))))
+
+              :else (do ; If we're NOT replacing, we need to reinstall to
+                        ; override any *previously* installed bin
+                        (c/exec :apt-get :install :--reinstall :scylla-server)))))))
 
 (defn install!
   "Installs ScyllaDB on the given node."
