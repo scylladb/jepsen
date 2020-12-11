@@ -6,6 +6,7 @@
             [clojure.java.io :as io]
             [clojure.java.jmx :as jmx]
             [clojure.tools.logging :refer [info]]
+            [dom-top.core :as dt :refer [with-retry]]
             [jepsen
              [db        :as db]
              [util      :as util :refer [meh timeout]]
@@ -308,10 +309,17 @@
               deb (do (info "Installing local" deb "on top of existing Scylla")
                       (let [tmp  (cu/tmp-dir!)
                             file (str tmp "/scylla.deb")]
-                        (try (c/upload deb file)
-                             (c/exec :dpkg :-i file)
-                             (finally
-                               (c/exec :rm :-rf tmp)))))
+                        (dt/with-retry [tries 10]
+                          (c/upload deb file)
+                          (c/exec :dpkg :-i file)
+                          (catch clojure.lang.ExceptionInfo e
+                            (when (zero? tries)
+                              (throw e))
+                            (info "Retrying upload of local deb...")
+                            (Thread/sleep (rand-int 10000))
+                            (retry (dec tries)))
+                          (finally
+                            (c/exec :rm :-rf tmp)))))
 
               :else (do ; If we're NOT replacing, we need to reinstall to
                         ; override any *previously* installed bin
