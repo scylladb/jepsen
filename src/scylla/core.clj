@@ -218,6 +218,9 @@
     :parse-fn parse-long
     :validate [pos? "must be positive"]]
 
+   [nil "--[no-]install-scylla" "Install ScyllaDB during tests"
+    :default true]
+
    [nil "--local-deb FILE" "If given, installs the local .deb file on top of the existing Scylla installation."]
 
    [nil "--local-scylla-bin FILE" (str "If provided, uploads the local file to each DB node, replacing " db/scylla-bin ". Helpful for testing development builds.")]
