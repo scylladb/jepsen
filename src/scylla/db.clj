@@ -452,7 +452,7 @@
         (enable!)
         ; Right, install
         (doto node
-          (when (:install-scylla test) (install! test))
+          (cond-> (:install-scylla test) (install! test))
           (configure! test))
         ; And start
         (let [t1 (util/linear-time-nanos)]
