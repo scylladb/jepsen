@@ -267,8 +267,8 @@
     ; If the version has changed, we wipe out the apt repo file and
     ; uninstall the existing packages.
     (when (cu/exists? repo-file)
-      (let [prev-version ((re-find #"scylladb-([\d\.]+)"
-                                   (c/exec :cat repo-file)) 1)]
+      (let [[_ prev-version] (re-find #"scylladb-([\d\.]+)"
+                                      (c/exec :cat repo-file))]
         (when (not= prev-version (:version test))
           (info "Version changed from" prev-version "to" (:version test)
                 "- uninstalling packages and replacing apt repo")
