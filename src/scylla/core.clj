@@ -60,7 +60,7 @@
    :counter
    :cmap
    :cset
-   :mv
+   ; :mv ; exclude mv workload from test-all command, because it supposed to fail.
    :write-isolation
    :list-append
    :wr-register])
