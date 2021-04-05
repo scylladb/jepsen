@@ -147,12 +147,12 @@
 
 (def await-open-interval
   "How long to sleep between connection attempts, in ms"
-  5000)
+  6000)
 
 (defn await-open
   "Blocks until a connection is available, then returns that connection."
   [test node]
-  (dt/with-retry [tries 10]
+  (dt/with-retry [tries 20]
     (let [c (open test node)]
       (alia/execute (:session c)
                     (hayt/->raw (hayt/select :system.peers)))
