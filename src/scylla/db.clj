@@ -328,21 +328,15 @@
 
 (defn bootstrap-seeds
   "Returns a comma-separated string of seed nodes for boostrap.
-  Return all nodes to speed up bootstrap."
+  Return only first node."
   [test]
-  (->> (:nodes test)
-       (map dns-resolve)
-       (str/join ",")))
+  (->> (:nodes test) first dns-resolve str))
 
 (defn join-seeds
   "Returns a comma-separated string of seed nodes to join to.
-   Is used when adding a node to a non-empty cluster. We must
-   exclude the node being added from the list of seeds to ensure
-   the new node is streamed to before it begins serving reads and writes."
+   Is used when adding a node to a non-empty cluster. Return only first node."
   [test node]
-  (->> (disj (into #{} (:nodes test)) node)
-       (map dns-resolve)
-       (str/join ",")))
+  (->> (:nodes test) first dns-resolve str))
 
 (defn extra-scylla-args
   "Extra scylla args which are substituted into the SCYLLA_ARGS config."
@@ -439,6 +433,21 @@
     (when (cu/exists? disabled)
       (c/exec :mv disabled scylla-bin))))
 
+(defn wait-for-previous
+  "If it is not the first node on the list of nodes,
+  it waits until the previous node from the list is bootstrapped."
+  [test node]
+  (let [nodes (:nodes test)
+        fst (first nodes)]
+    (when (not= node fst)
+        (loop [[previous & tail] nodes]
+            (if (= node (first tail))
+                (do
+                  (info "Waiting for" previous)
+                  (sc/close! (sc/await-open test previous))
+                  (info previous "is available"))
+                (recur tail))))))
+
 (defn db
   "Sets up and tears down ScyllaDB"
   [version]
@@ -460,6 +469,7 @@
           (configure! test))
         ; And start
         (let [t1 (util/linear-time-nanos)]
+          (wait-for-previous test node)
           (db/start! db test node)
           ; Once bootstrapped, update scylla.yaml with correct
           ; configuration for a non-empty cluster.
