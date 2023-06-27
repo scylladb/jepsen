@@ -506,3 +506,6 @@ skip_wait_for_gossip_to_settle: 0
 # When we concurrently restart nodes, they'll lock up on boot for 300 seconds
 # by default.
 shadow_round_ms: 1000
+
+# this is needed since `consistent_cluster_management` is enabled by default in 5.2/2023.1
+force_schema_commit_log: true
